@@ -9,7 +9,7 @@ VOLUME=$1
 #check if parameter is set
 if [ -z "$VOLUME" ];
 then
-    echo "use ./alexa-volume.sh 40"
+    echo "use ./alexa-volume.sh 40 # Use something between 0-100"
     exit
 fi
 
