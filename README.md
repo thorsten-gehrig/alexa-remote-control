@@ -1,26 +1,33 @@
 # alexa-remote-control
-control Amazon Alexa from command Line (set volume, select station from tunein or pandora) 
+control Amazon Alexa from command Line
 
-Please find more details here: https://www.gehrig.info/alexa/Alexa.html
+[code]
+alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
+                    -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
+                    -s <trackID> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |
+                    -i | -p | -a | -P | -S | -m <multiroom_device> [device_1 .. device_X] | -l | -h
+   -e : run command
+   -q : query queue
+   -b : connect/disconnect bluetooth device
+   -r : play tunein radio
+   -s : play library track
+   -t : play Prime playlist
+   -u : play Prime station
+   -v : play Prime historical queue
+   -w : play library playlist
+   -i : list imported library tracks
+   -p : list purchased library tracks
+   -P : list Prime playlists
+   -S : list Prime stations
+   -a : list available devices
+   -m : delete multiroom and/or create new multiroom containing devices
+   -l : logoff
+   -h : help
+[/code]
+ 
+There's also a "plain" version, which lacks some functionality (-P and -S) but doesn't need 'jq' for JSON processing.
+
+http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
 
 
 
-More commands - not yet in a script... but easy for DIY:
-
-Shuffle on/off:
-
-CMD='{"type":"ShuffleCommand","shuffle":true}'
-
-CMD='{"type":"ShuffleCommand","shuffle":false}'
-
-Repeat on/off:
-
-CMD='{"type":"RepeatCommand","repeat":true}'
-
-CMD='{"type":"RepeatCommand","repeat":false}'
-
-+30Sek / -30Sek (e.g. for Books)
-
-CMD='{"type":"ForwardCommand"}'
-
-CMD='{"type":"RewindCommand"}'
