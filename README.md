@@ -1,7 +1,7 @@
 # alexa-remote-control
 control Amazon Alexa from command Line
 
-[code]
+```
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
                     -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
                     -s <trackID> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |
@@ -23,7 +23,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -m : delete multiroom and/or create new multiroom containing devices
    -l : logoff
    -h : help
-[/code]
+```
  
 There's also a "plain" version, which lacks some functionality (-P and -S) but doesn't need 'jq' for JSON processing.
 
