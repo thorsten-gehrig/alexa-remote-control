@@ -60,7 +60,7 @@ BLUETOOTH=""
 
 usage()
 {
-	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
+	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <stationid> | -s <trackID> | -t <ASIN> |"
 	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
 	echo "   -e : run command"
 	echo "   -q : query queue"
