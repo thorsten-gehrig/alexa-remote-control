@@ -1,26 +1,15 @@
 #!/bin/sh
 #
-# Amazon Alexa Remote Control
+# Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2017-10-10: v0.1 initial release
-# 2017-10-11: v0.2 TuneIn Station Search
-# 2017-10-11: v0.2a commands on special device "ALL" are executed on all ECHO+WHA
-# 2017-10-16: v0.3 added playback of library tracks
-# 2017-10-24: v0.4 added playback information
-# 2017-11-21: v0.5 added Prime station and playlist
-# 2017-11-22: v0.6 added Prime historical queue and replaced getopts
-# 2017-11-25: v0.6a cURL is now configurable
-# 2017-11-25: v0.7 added multiroom create/delete, playback of library playlist
-# 2017-11-30: v0.7a added US config, fixed device names containing spaces
-# 2017-12-07: v0.7b added Bluetooth connect/disconnect
+# 2017-12-07: v0.7b (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
 # (no BASHisms were used, should run with any shell)
 # - requires cURL for web communication
 # - sed and awk for extraction
-# - jq as command line JSON parser (optional for the fancy bits)
 #
 ##########################################
 
@@ -51,6 +40,7 @@ OPTS='--compressed'
 TMP="/tmp"
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
+DEVTXT="${TMP}/.alexa.devicelist.txt"
 
 GUIVERSION=0
 
@@ -60,7 +50,6 @@ COMMAND=""
 STATIONID=""
 QUEUE=""
 SONG=""
-TYPE=""
 ASIN=""
 SEEDID=""
 HIST=""
@@ -72,10 +61,10 @@ BLUETOOTH=""
 usage()
 {
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
-	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
+	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
 	echo "   -e : run command"
-	echo "   -b : connect/disconnect bluetooth device"
 	echo "   -q : query queue"
+	echo "   -b : connect/disconnect bluetooth device"
 	echo "   -r : play tunein radio"
 	echo "   -s : play library track"
 	echo "   -t : play Prime playlist"
@@ -84,8 +73,6 @@ usage()
 	echo "   -w : play library playlist"
 	echo "   -i : list imported library tracks"
 	echo "   -p : list purchased library tracks"
-	echo "   -P : list Prime playlists"
-	echo "   -S : list Prime stations"
 	echo "   -a : list available devices"
 	echo "   -m : delete multiroom and/or create new multiroom containing devices"
 	echo "   -l : logoff"
@@ -141,15 +128,6 @@ while [ "$#" -gt 0 ] ; do
 			fi
 			STATIONID=$2
 			shift
-			# stationIDs are "s1234" or "s12345"
-			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9]}" ] ; then
-				# search for station name
-				STATIONID=$(${CURL} ${OPTS} -s --data-urlencode "query=${STATIONID}" -G "https://api.tunein.com/profiles?fullTextSearch=true" | jq -r '.Items[] | select(.ContainerType == "Stations") | .Children[] | select( .Index==1 ) | .GuideId')
-				if [ -z "$STATIONID" ] ; then
-					echo "ERROR: no Station \"$2\" found on TuneIn"
-					exit 1
-				fi
-			fi
 			;;
 		-s)
 			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
@@ -196,23 +174,20 @@ while [ "$#" -gt 0 ] ; do
 			PLIST=$2
 			shift
 			;;
+		-d)
+			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
+				echo "ERROR: missing argument for ${1}"
+				usage
+				exit 1
+			fi
+			DEVICE=$2
+			shift
+			;;
 		-l)
 			LOGOFF="true"
 			;;
 		-a)
 			LIST="true"
-			;;
-		-i)
-			TYPE="IMPORTED"
-			;;
-		-p)
-			TYPE="PURCHASES"
-			;;
-		-P)
-			PRIME="prime-playlist-browse-nodes"
-			;;
-		-S)
-			PRIME="prime-sections"
 			;;
 		-q)
 			QUEUE="true"
@@ -281,13 +256,13 @@ log_in()
 #
 # following headers are required:
 #	Accept-Language	(possibly for determining login region)
-#	User-Agent	(cURL wouldn't store cookies without)
+#	User-Agent	(CURL wouldn't store cookies without)
 #
 ################################################################
 
 rm -f ${DEVLIST}
+rm -f ${DEVTXT}
 rm -f ${COOKIE}
-rm -f ${TMP}/.alexa.*.list
 
 #
 # get first cookie and write redirection target into referer
@@ -329,6 +304,10 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: kee
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})"\
  "https://${ALEXA}/api/devices-v2/device?cached=false" > ${DEVLIST}
+ 
+	if [ ! -f ${DEVTXT} ] ; then
+		cat ${DEVLIST}| sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' > ${DEVTXT}
+	fi
 }
 
 check_status()
@@ -351,31 +330,84 @@ check_status()
 #
 set_var()
 {
-	DEVICE=$(echo ${DEVICE} | sed -r 's/%20/ /g')
-	
+	ATTR="accountName"
+	NAME=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+
+	ATTR="deviceType"
+	TYPE=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+
+	ATTR="serialNumber"
+	SERIAL=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+
+	ATTR="deviceOwnerCustomerId"
+	MEDIAID=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+
+	ATTR="deviceFamily"
+	FAMILY=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+
+
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
+        	IDX=0
+		for I in $FAMILY ; do
+			if [ "$I" = "ECHO" ] ; then
+			break;
+			fi
+			IDX=$((IDX+1))
+		done
+
+		C=0
+		for I in $NAME ; do
+			if [ $C -eq $IDX ] ; then
+				DEVICE=$I
+				break
+			fi
+			C=$((C+1))
+		done
 		echo "setting default device to:"
-		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" ) | .accountName] | .[0]' ${DEVLIST})
 		echo ${DEVICE}
+	else
+		DEVICE=`echo $DEVICE | sed 's/ /_/g'`
+		IDX=0
+		for I in $NAME ; do
+			if [ "$I" = "$DEVICE" ] ; then
+				break;
+			fi
+			IDX=$((IDX+1))
+		done
 	fi
 
-	DEVICETYPE=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceType' ${DEVLIST})
-	DEVICESERIALNUMBER=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .serialNumber' ${DEVLIST})
-	MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST})
+	C=0
+	for I in $MEDIAID ; do
+		if [ $C -eq $IDX ] ; then
+			MEDIAOWNERCUSTOMERID=$I
+			break
+		fi
+		C=$((C+1))
+	done
+
+	C=0
+	for I in $TYPE ; do
+		if [ $C -eq $IDX ] ; then
+			DEVICETYPE=$I
+			break
+		fi
+		C=$((C+1))
+	done
+
+	C=0
+	for I in $SERIAL ; do
+		if [ $C -eq $IDX ] ; then
+			DEVICESERIALNUMBER=$I
+			break
+		fi
+		C=$((C+1))
+	done
 
 	if [ -z "${DEVICESERIALNUMBER}" ] ; then
 		echo "ERROR: unkown device dev:${DEVICE}"
 		exit 1
 	fi
-}
-
-#
-# list available devices from JSON device list
-#
-list_devices()
-{
-	jq -r '.devices[].accountName' ${DEVLIST}
 }
 
 #
@@ -456,89 +488,28 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: kee
 }
 
 #
-# show library tracks
-#
-show_library()
-{
-	OFFSET="";
-	SIZE=50;
-	TOTAL=0;
-	FILE=${TMP}/.alexa.${TYPE}.list
-
-	if [ ! -f ${FILE} ] ; then
-		echo -n '{"playlist":{"entryList":[' > ${FILE}
-
-		while [ 50 -le ${SIZE} ] ; do
-
-${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
- -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/cloudplayer/playlists/${TYPE}-V0-OBJECTID?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&size=${SIZE}&offset=${OFFSET}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}" > ${FILE}.tmp
-
-			OFFSET=$(jq -r '.nextResultsToken' ${FILE}.tmp)
-			SIZE=$(jq -r '.playlist | .trackCount' ${FILE}.tmp)
-			jq -r -c '.playlist | .entryList' ${FILE}.tmp >> ${FILE}
-			echo "," >> ${FILE}
-			TOTAL=$((TOTAL+SIZE))
-		done
-		echo "[]],\"trackCount\":\"${TOTAL}\"}}" >> ${FILE}
-		rm -f ${FILE}.tmp
-	fi
-	jq -r '.playlist.trackCount' ${FILE}
-	jq '.playlist.entryList[] | .[]' ${FILE}
-}
-
-#
-# show Prime stations and playlists
-#
-show_prime()
-{
-	FILE=${TMP}/.alexa.${PRIME}.list
-
-	if [ ! -f ${FILE} ] ; then
-${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
- -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/prime/{$PRIME}?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}" > ${FILE}
-
-		if [ "$PRIME" = "prime-playlist-browse-nodes" ] ; then
-			for I in $(jq -r '.primePlaylistBrowseNodeList[].subNodes[].nodeId' ${FILE} 2>/dev/null) ; do
-${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
- -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/prime/prime-playlists-by-browse-node?browseNodeId=${I}&deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}" >> ${FILE}
-			done
-		fi
-	fi
-	jq '.' ${FILE}
-}
-
-#
 # current queue
 #
 show_queue()
 {
-	PARENT=""
-	PARENTID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST})
-	if [ "$PARENTID" != "null" ] ; then
-		PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST})
-		PARENT="&lemurId=${PARENTID}&lemurDeviceType=${PARENTDEVICE}"
-	fi
-
+	echo "/api/np/player"
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/np/player?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}${PARENT}" | jq '.'
-
+ "https://${ALEXA}/api/np/player?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+	echo
+	echo "/api/np/queue"
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq '.'
-
-${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ "https://${ALEXA}/api/np/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+	echo
+	echo "/api/media/state"
+ ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk '$0 ~/.amazon.de.*csrf[\s\t]/ {print $7}' ${COOKIE})" -X GET \
- "https://${ALEXA}/api/np/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq '.'
+ "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+	echo
 }
 
 #
@@ -601,11 +572,11 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Co
  https://${ALEXA}/logout > /dev/null
 
 rm -f ${DEVLIST}
+rm -f ${DEVTXT}
 rm -f ${COOKIE}
-rm -f ${TMP}/.alexa.*.list
 }
 
-if [ -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
+if [ -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$QUEUE" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
@@ -627,37 +598,17 @@ if [ $? -eq 0 ] ; then
 	log_in
 fi
 
-if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
-	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
-			set_var
-			if [ -n "$COMMAND" ] ; then
-				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-				run_cmd
-			else
-				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-				show_queue
-			fi
-		done
-	else
-		set_var
-		if [ -n "$COMMAND" ] ; then
-			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-			run_cmd
-		else
-			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-			show_queue
-		fi
+if [ -n "$COMMAND" ] ; then
+	set_var
+	if [ -n "$COMMAND" ] ; then
+		echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+		run_cmd
 	fi
 elif [ -n "$LEMUR" ] ; then
-	DEVICESERIALNUMBER=$(jq --arg device "${LEMUR}" -r '.devices[] | select(.accountName == $device and .deviceFamily == "WHA") | .serialNumber' ${DEVLIST})
+	DEVICE="${LEMUR}"
+	set_var
 	if [ -n "$DEVICESERIALNUMBER" ] ; then
 		delete_multiroom
-	else
-		if [ -z "$CHILD" ] ; then
-			echo "ERROR: ${LEMUR} is no multiroom device. Cannot delete ${LEMUR}".
-			exit 1
-		fi
 	fi
 	if [ -z "$CHILD" ] ; then
 		echo "Deleted multi room dev:${LEMUR} serial:${DEVICESERIALNUMBER}"
@@ -666,6 +617,7 @@ elif [ -n "$LEMUR" ] ; then
 		create_multiroom
 	fi
 	rm -f ${DEVLIST}
+	rm -f ${DEVTXT}
 	get_devlist
 elif [ -n "$BLUETOOTH" ] ; then
 	set_var
@@ -688,17 +640,6 @@ elif [ -n "$PLIST" ] ; then
 	set_var
 	echo "playing library playlist:${PLIST} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} mediaownerid:${MEDIAOWNERCUSTOMERID}"
 	play_playlist
-elif [ -n "$LIST" ] ; then
-	echo "the following devices exist in your account:"
-	list_devices
-elif [ -n "$TYPE" ] ; then
-	set_var
-	echo -n "the following songs exist in your ${TYPE} library: "
-	show_library
-elif [ -n "$PRIME" ] ; then
-	set_var
-	echo "the following songs exist in your PRIME ${PRIME}:"
-	show_prime
 elif [ -n "$ASIN" ] ; then
 	set_var
 	echo "playing PRIME playlist ${ASIN}"
@@ -711,6 +652,14 @@ elif [ -n "$HIST" ] ; then
 	set_var
 	echo "playing PRIME historical queue ${HIST}"
 	play_prime_hist_queue
+elif [ -n "$QUEUE" ]; then
+	set_var
+	echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+	show_queue
+elif [ -n "$LIST" ] ; then
+	ATTR="accountName"
+	echo "the following devices exist in your account:"
+	grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'
 else
 	echo "no alexa command received"
 fi
