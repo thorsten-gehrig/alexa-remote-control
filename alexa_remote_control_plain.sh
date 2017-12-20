@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2017-12-19: v0.7d (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2017-12-20: v0.7de(for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -585,15 +585,15 @@ if [ ! -f ${COOKIE} ] ; then
 	log_in
 fi
 
-if [ ! -f ${DEVTXT} ] ; then
-	echo "device list do not exist. downloading ..."
-	get_devlist
-fi
-
 check_status
 if [ $? -eq 0 ] ; then
 	echo "cookie expired, logging in again ..."
 	log_in
+fi
+
+if [ ! -f ${DEVTXT} ] ; then
+	echo "device list do not exist. downloading ..."
+	get_devlist
 fi
 
 if [ -n "$COMMAND" ] ; then

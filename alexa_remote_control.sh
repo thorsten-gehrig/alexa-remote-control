@@ -16,6 +16,7 @@
 # 2017-12-07: v0.7b added Bluetooth connect/disconnect
 # 2017-12-18: v0.7c fixed US version
 # 2017-12-19: v0.7d fixed AWK csrf extraction on some systems
+# 2017-12-20: v0.7e moved get_devlist after check_status
 #
 ###
 #
@@ -618,15 +619,15 @@ if [ ! -f ${COOKIE} ] ; then
 	log_in
 fi
 
-if [ ! -f ${DEVLIST} ] ; then
-	echo "device list do not exist. downloading ..."
-	get_devlist
-fi
-
 check_status
 if [ $? -eq 0 ] ; then
 	echo "cookie expired, logging in again ..."
 	log_in
+fi
+
+if [ ! -f ${DEVLIST} ] ; then
+	echo "device list do not exist. downloading ..."
+	get_devlist
 fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
