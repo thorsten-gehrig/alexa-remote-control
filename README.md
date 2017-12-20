@@ -25,7 +25,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -h : help
 ```
  
-There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names) but doesn't need 'jq' for JSON processing.
+There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names) but doesn't require 'jq' for JSON processing.
 
 http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
 
