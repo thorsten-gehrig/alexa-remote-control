@@ -3,12 +3,12 @@ control Amazon Alexa from command Line
 
 ```
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
-                    -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
+                    -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
                     -s <trackID> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |
                     -i | -p | -a | -P | -S | -m <multiroom_device> [device_1 .. device_X] | -l | -h
    -e : run command
    -q : query queue
-   -b : connect/disconnect bluetooth device
+   -b : connect/disconnect/list bluetooth device
    -r : play tunein radio
    -s : play library track
    -t : play Prime playlist
