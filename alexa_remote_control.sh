@@ -623,11 +623,20 @@ check_status
 if [ $? -eq 0 ] ; then
 	echo "cookie expired, logging in again ..."
 	log_in
+	check_status
+	if [ $? -eq 0 ] ; then
+		echo "log in failed, aborting"
+		exit 1
+	fi
 fi
 
 if [ ! -f ${DEVLIST} ] ; then
 	echo "device list do not exist. downloading ..."
 	get_devlist
+	if [ ! -f ${DEVLIST} ] ; then
+		echo "failed to download device list, aborting"
+		exit 1
+	fi
 fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
