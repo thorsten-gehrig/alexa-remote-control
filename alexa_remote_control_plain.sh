@@ -3,13 +3,13 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2017-12-20: v0.7e(for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2018-01-10: v0.8a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
 # (no BASHisms were used, should run with any shell)
 # - requires cURL for web communication
-# - sed and awk for extraction
+# - (GNU) sed and awk for extraction
 #
 ##########################################
 
@@ -60,11 +60,11 @@ BLUETOOTH=""
 
 usage()
 {
-	echo "$0 [-d <device>] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <stationid> | -s <trackID> | -t <ASIN> |"
+	echo "$0 [-d <device>] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <stationid> | -s <trackID> | -t <ASIN> |"
 	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
 	echo "   -e : run command"
 	echo "   -q : query queue"
-	echo "   -b : connect/disconnect bluetooth device"
+	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -r : play tunein radio"
 	echo "   -s : play library track"
 	echo "   -t : play Prime playlist"
@@ -348,7 +348,7 @@ set_var()
 		# if no device was supplied, use the first Echo(dot) in device list
         	IDX=0
 		for I in $FAMILY ; do
-			if [ "$I" = "ECHO" ] ; then
+			if [ "$I" = "ECHO" -o "$I" = "KNIGHT" ] ; then
 			break;
 			fi
 			IDX=$((IDX+1))
@@ -540,6 +540,17 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: kee
 }
 
 #
+# list bluetooth devices
+#
+list_bluetooth()
+{
+${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+ "https://${ALEXA}/api/bluetooth?cached=false"
+}
+
+#
 # connect bluetooth device
 #
 connect_bluetooth()
@@ -589,11 +600,20 @@ check_status
 if [ $? -eq 0 ] ; then
 	echo "cookie expired, logging in again ..."
 	log_in
+	check_status
+	if [ $? -eq 0 ] ; then
+		echo "log in failed, aborting"
+		exit 1
+	fi
 fi
 
 if [ ! -f ${DEVTXT} ] ; then
 	echo "device list do not exist. downloading ..."
 	get_devlist
+	if [ ! -f ${DEVTXT} ] ; then
+		echo "failed to download device list, aborting"
+		exit 1
+	fi
 fi
 
 if [ -n "$COMMAND" ] ; then
@@ -622,6 +642,9 @@ elif [ -n "$BLUETOOTH" ] ; then
 	if [ "$BLUETOOTH" = "null" ] ; then
 		echo "disconnecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} from bluetooth"
 		disconnect_bluetooth
+	elif [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
+		echo "bluetooth api list:"
+		list_bluetooth
 	else
 		echo "connecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} to bluetooth device:${BLUETOOTH}"
 		connect_bluetooth

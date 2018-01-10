@@ -17,12 +17,15 @@
 # 2017-12-18: v0.7c fixed US version
 # 2017-12-19: v0.7d fixed AWK csrf extraction on some systems
 # 2017-12-20: v0.7e moved get_devlist after check_status
+# 2018-01-08: v0.7f added echo-show to ALL group, TuneIn station can now be up to 6 digits
+# 2018-01-08: v0.8 added bluetooth list function
+# 2018-01-10: v0.8a abort when login was unsuccessful
 #
 ###
 #
 # (no BASHisms were used, should run with any shell)
 # - requires cURL for web communication
-# - sed and awk for extraction
+# - (GNU) sed and awk for extraction
 # - jq as command line JSON parser (optional for the fancy bits)
 #
 ##########################################
@@ -74,10 +77,10 @@ BLUETOOTH=""
 
 usage()
 {
-	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
+	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
 	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
 	echo "   -e : run command"
-	echo "   -b : connect/disconnect bluetooth device"
+	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -r : play tunein radio"
 	echo "   -s : play library track"
@@ -145,7 +148,7 @@ while [ "$#" -gt 0 ] ; do
 			STATIONID=$2
 			shift
 			# stationIDs are "s1234" or "s12345"
-			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9]}" ] ; then
+			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9][0-9]}" ] ; then
 				# search for station name
 				STATIONID=$(${CURL} ${OPTS} -s --data-urlencode "query=${STATIONID}" -G "https://api.tunein.com/profiles?fullTextSearch=true" | jq -r '.Items[] | select(.ContainerType == "Stations") | .Children[] | select( .Index==1 ) | .GuideId')
 				if [ -z "$STATIONID" ] ; then
@@ -359,7 +362,7 @@ set_var()
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
 		echo "setting default device to:"
-		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" ) | .accountName] | .[0]' ${DEVLIST})
+		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" ) | .accountName] | .[0]' ${DEVLIST})
 		echo ${DEVICE}
 	fi
 
@@ -574,6 +577,17 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: kee
 }
 
 #
+# list bluetooth devices
+#
+list_bluetooth()
+{
+${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+ "https://${ALEXA}/api/bluetooth?cached=false" | jq --arg serial "${DEVICESERIALNUMBER}" -r '.bluetoothStates[] | select(.deviceSerialNumber == $serial) | "\(.pairedDeviceList[]?.address) \(.pairedDeviceList[]?.friendlyName)"'
+}
+
+#
 # connect bluetooth device
 #
 connect_bluetooth()
@@ -641,7 +655,7 @@ fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
@@ -680,11 +694,24 @@ elif [ -n "$LEMUR" ] ; then
 	rm -f ${DEVLIST}
 	get_devlist
 elif [ -n "$BLUETOOTH" ] ; then
-	set_var
-	if [ "$BLUETOOTH" = "null" ] ; then
+	if [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
+		if [ "${DEVICE}" = "ALL" ] ; then
+			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+				set_var
+				echo "bluetooth devices for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}:"
+				list_bluetooth
+			done
+		else
+			set_var
+			echo "bluetooth devices for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}:"
+			list_bluetooth
+		fi
+	elif [ "$BLUETOOTH" = "null" ] ; then
+		set_var
 		echo "disconnecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} from bluetooth"
 		disconnect_bluetooth
 	else
+		set_var
 		echo "connecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} to bluetooth device:${BLUETOOTH}"
 		connect_bluetooth
 	fi
