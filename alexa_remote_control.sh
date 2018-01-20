@@ -612,19 +612,28 @@ if [ -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID"
 fi
 
 if [ ! -f ${COOKIE} ] ; then
-	echo "cookie do not exist. logging in ..."
+	echo "cookie does not exist. logging in ..."
 	log_in
-fi
-
-if [ ! -f ${DEVLIST} ] ; then
-	echo "device list do not exist. downloading ..."
-	get_devlist
 fi
 
 check_status
 if [ $? -eq 0 ] ; then
 	echo "cookie expired, logging in again ..."
 	log_in
+	check_status
+	if [ $? -eq 0 ] ; then
+		echo "log in failed, aborting"
+		exit 1
+	fi
+fi
+
+if [ ! -f ${DEVLIST} ] ; then
+	echo "device list do not exist. downloading ..."
+	get_devlist
+	if [ ! -f ${DEVLIST} ] ; then
+		echo "failed to download device list, aborting"
+		exit 1
+	fi
 fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
