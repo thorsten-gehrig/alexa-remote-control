@@ -20,6 +20,7 @@
 # 2018-01-08: v0.7f added echo-show to ALL group, TuneIn station can now be up to 6 digits
 # 2018-01-08: v0.8 added bluetooth list function
 # 2018-01-10: v0.8a abort when login was unsuccessful
+# 2018-01-25: v0.8b added echo-spot to ALL group
 #
 ###
 #
@@ -362,7 +363,7 @@ set_var()
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
 		echo "setting default device to:"
-		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" ) | .accountName] | .[0]' ${DEVLIST})
+		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" ) | .accountName] | .[0]' ${DEVLIST})
 		echo ${DEVICE}
 	fi
 
@@ -655,7 +656,7 @@ fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
@@ -696,7 +697,7 @@ elif [ -n "$LEMUR" ] ; then
 elif [ -n "$BLUETOOTH" ] ; then
 	if [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
 		if [ "${DEVICE}" = "ALL" ] ; then
-			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 				set_var
 				echo "bluetooth devices for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}:"
 				list_bluetooth

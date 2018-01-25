@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2018-01-10: v0.8a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2018-01-10: v0.8b (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -348,7 +348,7 @@ set_var()
 		# if no device was supplied, use the first Echo(dot) in device list
         	IDX=0
 		for I in $FAMILY ; do
-			if [ "$I" = "ECHO" -o "$I" = "KNIGHT" ] ; then
+			if [ "$I" = "ECHO" -o "$I" = "KNIGHT" -o "$I" = "ROOK" ] ; then
 			break;
 			fi
 			IDX=$((IDX+1))
