@@ -22,6 +22,10 @@
 # 2018-01-10: v0.8a abort when login was unsuccessful
 # 2018-01-25: v0.8b added echo-spot to ALL group
 # 2018-01-28: v0.8c added configurable browser string
+# 2018-02-17: v0.8d no need to write the cookie file on every "check_status"
+# 2018-02-27: v0.8e added "lastalexa" option for HA-Bridge to send its command to a specific device
+#		(Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
+# 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
 #
 ###
 #
@@ -79,11 +83,12 @@ LEMUR=""
 CHILD=""
 PLIST=""
 BLUETOOTH=""
+LASTALEXA=""
 
 usage()
 {
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
-	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -l | -h"
+	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
 	echo "   -e : run command"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
@@ -99,6 +104,7 @@ usage()
 	echo "   -S : list Prime stations"
 	echo "   -a : list available devices"
 	echo "   -m : delete multiroom and/or create new multiroom containing devices"
+	echo "   -lastalexa : print device that received the last voice command"
 	echo "   -l : logoff"
 	echo "   -h : help"
 }
@@ -228,6 +234,9 @@ while [ "$#" -gt 0 ] ; do
 		-q)
 			QUEUE="true"
 			;;
+		-lastalexa)
+			LASTALEXA="true"
+			;;
 		-h|-\?|--help)
 			usage
 			exit 0
@@ -307,7 +316,7 @@ ${CURL} ${OPTS} -s -D "${TMP}/.alexa.header" -c ${COOKIE} -b ${COOKIE} -A "${BRO
  https://alexa.${AMAZON} | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata"
 
 #
-# login empty to generate sessiion
+# login empty to generate session
 #
 ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
  -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
@@ -316,8 +325,24 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
 # login with filled out form
 #  !!! referer now contains session in URL
 #
-${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
- -H "Referer: https://www.${AMAZON}/ap/signin/$(awk "\$0 ~/.${AMAZON}.*session-id[ \\s\\t]+/ {print \$7}" ${COOKIE})" --data-urlencode "email=${EMAIL}" --data-urlencode "password=${PASSWORD}" -d "@${TMP}/.alexa.postdata2" https://www.${AMAZON}/ap/signin > /dev/null
+${CURL} ${OPTS} -s -D "${TMP}/.alexa.header2" -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
+ -H "Referer: https://www.${AMAZON}/ap/signin/$(awk "\$0 ~/.${AMAZON}.*session-id[ \\s\\t]+/ {print \$7}" ${COOKIE})" --data-urlencode "email=${EMAIL}" --data-urlencode "password=${PASSWORD}" -d "@${TMP}/.alexa.postdata2" https://www.${AMAZON}/ap/signin > "${TMP}/.alexa.login"
+
+# check whether the login has been successful or exit otherwise
+if [ -z "$(grep 'Location: https://alexa.*html' ${TMP}/.alexa.header2)" ] ; then
+	echo "ERROR: Amazon Login was unsuccessful. Possibly you get a captcha login screen."
+	echo " Try logging in to https://alexa.${AMAZON} with your browser. In your browser"
+	echo " make sure to have all Amazon related cookies deleted and Javascript disabled!"
+	echo
+	echo " (For more information have a look at ${TMP}/.alexa.login)"
+
+	rm -f ${COOKIE}
+	rm -f "${TMP}/.alexa.header"
+	rm -f "${TMP}/.alexa.header2"
+	rm -f "${TMP}/.alexa.postdata"
+	rm -f "${TMP}/.alexa.postdata2"
+	exit 1
+fi
 
 #
 # get CSRF
@@ -326,7 +351,9 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Con
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  https://${ALEXA}/api/language > /dev/null
 
+rm -f "${TMP}/.alexa.login"
 rm -f "${TMP}/.alexa.header"
+rm -f "${TMP}/.alexa.header2"
 rm -f "${TMP}/.alexa.postdata"
 rm -f "${TMP}/.alexa.postdata2"
 }
@@ -348,7 +375,7 @@ check_status()
 # bootstrap with GUI-Version writes GUI version to cookie
 #  returns among other the current authentication state
 #
-	AUTHSTATUS=$(${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION} | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
+	AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION} | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
 
 	if [ "$AUTHSTATUS" = "true" ] ; then
 		return 1
@@ -363,7 +390,7 @@ check_status()
 set_var()
 {
 	DEVICE=$(echo ${DEVICE} | sed -r 's/%20/ /g')
-	
+
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
 		echo "setting default device to:"
@@ -615,6 +642,20 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 }
 
 #
+# device that sent the last command
+# (by Markus Wennesheimer)
+#
+last_alexa()
+{
+${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+ "https://${ALEXA}/api/activities?startTime=&size=1&offset=1" | jq -r '.activities[0].sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+# Serial number: | jq -r '.activities[0].sourceDeviceIds[0].serialNumber'
+# Device name:   | jq -r '.activities[0].sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+ }
+
+#
 # logout
 #
 log_off()
@@ -627,14 +668,14 @@ rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 }
 
-if [ -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
+if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
 fi
 
 if [ ! -f ${COOKIE} ] ; then
-	echo "cookie do not exist. logging in ..."
+	echo "cookie does not exist. logging in ..."
 	log_in
 fi
 
@@ -650,7 +691,7 @@ if [ $? -eq 0 ] ; then
 fi
 
 if [ ! -f ${DEVLIST} ] ; then
-	echo "device list do not exist. downloading ..."
+	echo "device list does not exist. downloading ..."
 	get_devlist
 	if [ ! -f ${DEVLIST} ] ; then
 		echo "failed to download device list, aborting"
@@ -755,6 +796,8 @@ elif [ -n "$HIST" ] ; then
 	set_var
 	echo "playing PRIME historical queue ${HIST}"
 	play_prime_hist_queue
+elif [ -n "$LASTALEXA" ] ; then
+	last_alexa
 else
 	echo "no alexa command received"
 fi
