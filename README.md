@@ -6,7 +6,8 @@ control Amazon Alexa from command Line
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
                     -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
                     -s <trackID> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |
-                    -i | -p | -a | -P | -S | -m <multiroom_device> [device_1 .. device_X] | -l | -h
+                    -i | -p | -a | -P | -S | -m <multiroom_device> [device_1 .. device_X] |
+                     -lastalexa | -l | -h
    -e : run command
    -q : query queue
    -b : connect/disconnect/list bluetooth device
@@ -22,6 +23,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -S : list Prime stations
    -a : list available devices
    -m : delete multiroom and/or create new multiroom containing devices
+   -lastalexa : print device that received the last voice command
    -l : logoff
    -h : help
 ```
