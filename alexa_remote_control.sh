@@ -26,6 +26,7 @@
 # 2018-02-27: v0.8e added "lastalexa" option for HA-Bridge to send its command to a specific device
 #		(Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
 # 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
+# 2018-03-09: v0.9a workaround for login problem, force curl to use http1.1
 #
 ###
 #
@@ -54,7 +55,7 @@ CURL='/usr/bin/curl'
 # cURL options
 #  -k : if your cURL cannot verify CA certificates, you'll have to trust any
 #  --compressed : if your cURL was compiled with libz you may use compression
-OPTS='--compressed'
+OPTS='--compressed --http1.1'
 #OPTS='-k --compressed'
 
 # browser identity
