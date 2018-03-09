@@ -31,7 +31,7 @@ CURL='/usr/bin/curl'
 # cURL options
 #  -k : if your cURL cannot verify CA certificates, you'll have to trust any
 #  --compressed : if your cURL was compiled with libz you may use compression
-OPTS='--compressed'
+OPTS='--compressed --http1.1'
 #OPTS='-k --compressed'
 
 # browser identity
