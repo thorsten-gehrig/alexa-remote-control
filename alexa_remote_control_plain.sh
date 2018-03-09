@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2018-02-27: v0.9 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2018-03-09: v0.9a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -31,8 +31,9 @@ CURL='/usr/bin/curl'
 # cURL options
 #  -k : if your cURL cannot verify CA certificates, you'll have to trust any
 #  --compressed : if your cURL was compiled with libz you may use compression
-OPTS='--compressed'
-#OPTS='-k --compressed'
+#  --http1.1 : cURL defaults to HTTP/2 on HTTPS connections if available
+OPTS='--compressed --http1.1'
+#OPTS='-k --compressed --http1.1'
 
 # browser identity
 BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:58.0) Gecko/20100101 Firefox/58.0'
