@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2018-02-27: v0.9 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2018-03-09: v0.9a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
