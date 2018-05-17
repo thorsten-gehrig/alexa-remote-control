@@ -27,6 +27,7 @@
 #		(Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
 # 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
 # 2018-03-09: v0.9a workaround for login problem, force curl to use http1.1
+# 2018-05-17: v0.9b update browser string and accept language
 #
 ###
 #
@@ -40,8 +41,8 @@
 EMAIL='amazon_account@email.address'
 PASSWORD='Very_Secret_Amazon_Account_Password'
 
-LANGUAGE="de,en"
-#LANGUAGE="en-us"
+LANGUAGE="de,en-US"
+#LANGUAGE="en-US"
 
 AMAZON='amazon.de'
 #AMAZON='amazon.com'
@@ -60,7 +61,7 @@ OPTS='--compressed --http1.1'
 #OPTS='-k --compressed --http1.1'
 
 # browser identity
-BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:58.0) Gecko/20100101 Firefox/58.0'
+BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0'
 
 ###########################################
 # nothing to configure below here
