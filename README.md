@@ -4,15 +4,17 @@ control Amazon Alexa from command Line
 
 ```
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
-                    -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |
-                    -s <trackID> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |
-                    -i | -p | -a | -P | -S | -m <multiroom_device> [device_1 .. device_X] |
-                     -lastalexa | -l | -h
-   -e : run command
-   -q : query queue
+                    -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -r <"station name"|stationid> |
+                    -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> |
+                    -w <playlistId> | -i | -p | -P | -S | -a |  -l | -h |
+                    -m <multiroom_device> [device_1 .. device_X] | -lastalexa
+
+   -e : run command, additional SEQUENCECMDs:
+        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>'
    -b : connect/disconnect/list bluetooth device
+   -q : query queue
    -r : play tunein radio
-   -s : play library track
+   -s : play library track/library album
    -t : play Prime playlist
    -u : play Prime station
    -v : play Prime historical queue
