@@ -28,6 +28,12 @@
 # 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
 # 2018-03-09: v0.9a workaround for login problem, force curl to use http1.1
 # 2018-05-17: v0.9b update browser string and accept language
+# 2018-05-23: v0.9c update accept language (again)
+# 2018-06-12: v0.10 introducing TTS and more
+#       (thanks to Michael Geramb and his openHAB2 Amazon Echo Control binding)
+#		https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
+#		(thanks to Ralf Otto for implementing this feature in this script)
+# 2018-06-13: v0.10a added album play of imported library
 #
 ###
 #
@@ -41,7 +47,7 @@
 EMAIL='amazon_account@email.address'
 PASSWORD='Very_Secret_Amazon_Account_Password'
 
-LANGUAGE="de,en-US"
+LANGUAGE="de-DE"
 #LANGUAGE="en-US"
 
 AMAZON='amazon.de'
@@ -75,9 +81,13 @@ GUIVERSION=0
 LIST=""
 LOGOFF=""
 COMMAND=""
+TTS=""
+SEQUENCECMD=""
 STATIONID=""
 QUEUE=""
 SONG=""
+ALBUM=""
+ARTIST=""
 TYPE=""
 ASIN=""
 SEEDID=""
@@ -90,13 +100,17 @@ LASTALEXA=""
 
 usage()
 {
-	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> | -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> | -s <trackID> | -t <ASIN> |"
-	echo "         -u <seedID> | -v <queueID> | -w <playlistId> | -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
-	echo "   -e : run command"
+	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |"
+	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |"
+	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
+	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
+	echo
+	echo "   -e : run command, additional SEQUENCECMDs:"
+	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -r : play tunein radio"
-	echo "   -s : play library track"
+	echo "   -s : play library track/library album"
 	echo "   -t : play Prime playlist"
 	echo "   -u : play Prime station"
 	echo "   -v : play Prime historical queue"
@@ -179,6 +193,11 @@ while [ "$#" -gt 0 ] ; do
 			fi
 			SONG=$2
 			shift
+			if [ "${2#-}" = "${2}" -a -n "$2" ] ; then
+				ALBUM=$2
+				ARTIST=$SONG
+				shift
+			fi
 			;;
 		-t)
 			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
@@ -285,6 +304,29 @@ case "$COMMAND" in
 				usage
 				exit 1
 			fi
+			;;
+	speak:*)
+			SEQUENCECMD='Alexa.Speak'
+			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?!]//g')
+			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
+			;;
+	weather)
+			SEQUENCECMD='Alexa.Weather.Play'
+			;;
+	traffic)
+			SEQUENCECMD='Alexa.Traffic.Play'
+			;;
+	flashbriefing)
+			SEQUENCECMD='Alexa.FlashBriefing.Play'
+			;;
+	goodmorning)
+			SEQUENCECMD='Alexa.GoodMorning.Play'
+			;;
+	singasong)
+			SEQUENCECMD='Alexa.SingASong.Play'
+			;;
+	tellstory)
+			SEQUENCECMD='Alexa.TellStory.Play'
 			;;
 	"")
 			;;
@@ -421,13 +463,25 @@ list_devices()
 
 #
 # execute command
+# (SequenceCommands by Michael Geramb and Ralf Otto)
 #
 run_cmd()
 {
-${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
- -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d ${COMMAND}\
- "https://${ALEXA}/api/np/command?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+if [ -n "${SEQUENCECMD}" ]
+	then
+		echo "Sequence command: ${SEQUENCECMD}"
+		COMMAND="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${LANGUAGE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
+
+		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d ${COMMAND}\
+		 "https://${ALEXA}/api/behaviors/preview"
+else
+	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d ${COMMAND}\
+	 "https://${ALEXA}/api/np/command?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+fi
 }
 
 #
@@ -446,9 +500,15 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 #
 play_song()
 {
+	if [ -z "${ALBUM}" ] ; then
+		JSON="{\"trackId\":\"${SONG}\",\"playQueuePrime\":true}"
+	else
+		JSON="{\"albumArtistName\":\"${ARTIST}\",\"albumName\":\"${ALBUM}\"}"
+	fi
+
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d "{\"trackId\":\"${SONG}\",\"playQueuePrime\":true}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d "${JSON}"\
  "https://${ALEXA}/api/cloudplayer/queue-and-play?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}&shuffle=false"
 }
 
@@ -707,7 +767,7 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
-				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
 				run_cmd
 			else
 				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
@@ -717,7 +777,7 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 	else
 		set_var
 		if [ -n "$COMMAND" ] ; then
-			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
 			run_cmd
 		else
 			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
