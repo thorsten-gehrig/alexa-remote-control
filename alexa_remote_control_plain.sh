@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2018-06-13: v0.10a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2018-06-18: v0.10b (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -260,7 +260,7 @@ case "$COMMAND" in
 			;;
 	speak:*)
 			SEQUENCECMD='Alexa.Speak'
-			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?!]//g')
+			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?! ]//g' | sed 's/ /_/g')
 			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
 			;;
 	weather)
