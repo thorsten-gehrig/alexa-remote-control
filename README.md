@@ -3,7 +3,7 @@
 control Amazon Alexa from command Line
 
 ```
-alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |
+alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |
                     -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -r <"station name"|stationid> |
                     -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> |
                     -w <playlistId> | -i | -p | -P | -S | -a |  -l | -h |

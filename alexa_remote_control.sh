@@ -34,7 +34,8 @@
 #		https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
 #		(thanks to Ralf Otto for implementing this feature in this script)
 # 2018-06-13: v0.10a added album play of imported library
-# 2018-06-18: v0.10b added Alex routine execution
+# 2018-06-18: v0.10b added Alexa routine execution
+# 2019-01-22: v0.11 added repeat command, added environment variable parsing
 #
 ###
 #
@@ -45,35 +46,50 @@
 #
 ##########################################
 
-EMAIL='amazon_account@email.address'
-PASSWORD='Very_Secret_Amazon_Account_Password'
+SET_EMAIL='amazon_account@email.address'
+SET_PASSWORD='Very_Secret_Amazon_Account_Password'
 
-LANGUAGE="de-DE"
-#LANGUAGE="en-US"
+SET_LANGUAGE="de-DE"
+#SET_LANGUAGE="en-US"
 
-AMAZON='amazon.de'
-#AMAZON='amazon.com'
+SET_AMAZON='amazon.de'
+#SET_AMAZON='amazon.com'
 
-ALEXA='layla.amazon.de'
-#ALEXA='pitangui.amazon.com'
+SET_ALEXA='alexa.amazon.de'
+#SET_ALEXA='pitangui.amazon.com'
 
 # cURL binary
-CURL='/usr/bin/curl'
+SET_CURL='/usr/bin/curl'
 
 # cURL options
 #  -k : if your cURL cannot verify CA certificates, you'll have to trust any
 #  --compressed : if your cURL was compiled with libz you may use compression
 #  --http1.1 : cURL defaults to HTTP/2 on HTTPS connections if available
-OPTS='--compressed --http1.1'
-#OPTS='-k --compressed --http1.1'
+SET_OPTS='--compressed --http1.1'
+#SET_OPTS='-k --compressed --http1.1'
 
 # browser identity
-BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0'
+SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
+#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
+
+# tmp path
+SET_TMP="/tmp"
 
 ###########################################
 # nothing to configure below here
 #
-TMP="/tmp"
+
+# retrieving environment variables if any are set
+EMAIL=${EMAIL:-$SET_EMAIL}
+PASSWORD=${PASSWORD:-$SET_PASSWORD}
+AMAZON=${AMAZON:-$SET_AMAZON}
+ALEXA=${ALEXA:-$SET_ALEXA}
+LANGUAGE=${LANGUAGE:-$SET_LANGUAGE}
+BROWSER=${BROWSER:-$SET_BROWSER}
+CURL=${CURL:-$SET_CURL}
+OPTS=${OPTS:-$SET_OPTS}
+TMP=${TMP:-$SET_TMP}
+
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
 
@@ -102,7 +118,7 @@ LASTALEXA=""
 
 usage()
 {
-	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|vol:<0-100>> |"
+	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |"
 	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |"
 	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
 	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
@@ -295,6 +311,9 @@ case "$COMMAND" in
 			;;
 	shuffle)
 			COMMAND='{"type":"ShuffleCommand","shuffle":"true"}'
+			;;
+	repeat)
+			COMMAND='{"type":"RepeatCommand","repeat":true}'
 			;;
 	vol:*)
 			VOL=${COMMAND##*:}
