@@ -512,7 +512,7 @@ if [ -n "${SEQUENCECMD}" ]
 				rm -f "${TMP}/.alexa.automation"
 				exit 1
 			fi
-			SEQUENCE=$(jq --arg utterance "${UTTERANCE}"  -rc '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g" | sed 's/ /_/g')
+			SEQUENCE=$(jq --arg utterance "${UTTERANCE}"  -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g" | sed 's/ /_/g')
 			rm -f "${TMP}/.alexa.automation"
 
 			echo "Running routine: ${UTTERANCE}"
