@@ -445,7 +445,9 @@ check_status()
 # bootstrap with GUI-Version writes GUI version to cookie
 #  returns among other the current authentication state
 #
-	AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION} | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
+	AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION})
+	MEDIAOWNERCUSTOMERID=$(echo $AUTHSTATUS | sed -r 's/^.*"customerId":"([^,]+)",.*$/\1/g')
+	AUTHSTATUS=$(echo $AUTHSTATUS | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
 
 	if [ "$AUTHSTATUS" = "true" ] ; then
 		return 1
@@ -470,7 +472,10 @@ set_var()
 
 	DEVICETYPE=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceType' ${DEVLIST})
 	DEVICESERIALNUMBER=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .serialNumber' ${DEVLIST})
-	MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST})
+
+	# customerId is now retrieved from the logged in user
+	# the customerId in the device list is always from the user registering the device initially
+	# MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST})
 
 	if [ -z "${DEVICESERIALNUMBER}" ] ; then
 		echo "ERROR: unkown device dev:${DEVICE}"
