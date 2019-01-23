@@ -2,6 +2,23 @@
 # alexa-remote-control
 control Amazon Alexa from command Line
 
+The settings can now be controlled via environment variables.
+```
+EMAIL     - your login email
+PASSWORD  - your login password
+BROWSER   - the User-Agent your browser sends in the request header
+LANGUAGE  - the Accept-Language your browser sends in the request header
+AMAZON    - your Amazon domain
+ALEXA     - the URL you would use for the Alexa Web App
+CURL      - location of your cURL binary
+OPTS      - any cURL options you require
+TMP       - location of the temp dir
+```
+You will very likely want to set the language to:
+```
+export LANGUAGE='de,en-US;q=0.7,en;q=0.3'
+```
+
 ```
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |
                     -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -r <"station name"|stationid> |
