@@ -36,6 +36,7 @@
 # 2018-06-13: v0.10a added album play of imported library
 # 2018-06-18: v0.10b added Alexa routine execution
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
+# 2019-02-03: v0.11a fixed string escape for automation and speak commands
 #
 ###
 #
@@ -49,7 +50,7 @@
 SET_EMAIL='amazon_account@email.address'
 SET_PASSWORD='Very_Secret_Amazon_Account_Password'
 
-SET_LANGUAGE="de-DE"
+SET_LANGUAGE="de,en-US;q=0.7,en;q=0.3"
 #SET_LANGUAGE="en-US"
 
 SET_AMAZON='amazon.de'
@@ -70,7 +71,7 @@ SET_OPTS='--compressed --http1.1'
 
 # browser identity
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
-#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:62.0) Gecko/20100101 Firefox/62.0'
+#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:64.0) Gecko/20100101 Firefox/64.0'
 
 # tmp path
 SET_TMP="/tmp"
@@ -328,7 +329,7 @@ case "$COMMAND" in
 			;;
 	speak:*)
 			SEQUENCECMD='Alexa.Speak'
-			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?! ]//g' | sed 's/ /_/g')
+			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?! ]//g')
 			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
 			;;
 	automation:*)
@@ -500,7 +501,7 @@ run_cmd()
 if [ -n "${SEQUENCECMD}" ]
 	then
 		if [ "${SEQUENCECMD}" = 'automation' ] ; then
-		
+
 			${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 			 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 			 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
@@ -512,7 +513,7 @@ if [ -n "${SEQUENCECMD}" ]
 				rm -f "${TMP}/.alexa.automation"
 				exit 1
 			fi
-			SEQUENCE=$(jq --arg utterance "${UTTERANCE}"  -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g" | sed 's/ /_/g')
+			SEQUENCE=$(jq --arg utterance "${UTTERANCE}" -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
 			rm -f "${TMP}/.alexa.automation"
 
 			echo "Running routine: ${UTTERANCE}"
@@ -522,10 +523,16 @@ if [ -n "${SEQUENCECMD}" ]
 			COMMAND="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${LANGUAGE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
 		fi
 
+		# Due to some weird shell-escape-behavior the command has t be written to a file before POSTing it
+		echo $COMMAND > "${TMP}/.alexa.cmd"
+
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d ${COMMAND}\
+		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd" \
 		 "https://${ALEXA}/api/behaviors/preview"
+
+		rm -f "${TMP}/.alexa.cmd"
+
 else
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
