@@ -20,6 +20,8 @@ SET_PASSWORD='Very_Secret_Amazon_Account_Password'
 SET_LANGUAGE="de,en-US;q=0.7,en;q=0.3"
 #SET_LANGUAGE="en-US"
 
+SET_TTS_LOCALE='de-DE'
+
 SET_AMAZON='amazon.de'
 #SET_AMAZON='amazon.com'
 
@@ -56,6 +58,7 @@ LANGUAGE=${LANGUAGE:-$SET_LANGUAGE}
 BROWSER=${BROWSER:-$SET_BROWSER}
 CURL=${CURL:-$SET_CURL}
 OPTS=${OPTS:-$SET_OPTS}
+TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
 
 COOKIE="${TMP}/.alexa.cookie"
@@ -526,11 +529,10 @@ run_cmd()
 {
 if [ -n "${SEQUENCECMD}" ]
 	then
-		echo "Sequence command: ${SEQUENCECMD}"
-		COMMAND="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${LANGUAGE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
+		ALEXACMD="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${TTS_LOCALE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
 
 		# Due to some weird shell-escape-behavior the command has t be written to a file before POSTing it
-		echo $COMMAND > "${TMP}/.alexa.cmd"
+		echo $ALEXACMD > "${TMP}/.alexa.cmd"
 		
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
@@ -772,15 +774,23 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 				run_cmd
 				# in order to prevent a "Rate exceeded" we need to delay the command
 				sleep 1
+				echo
 			else
 				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 				show_queue
+				echo
 			fi
 		done < ${DEVALL}
 	else
+		set_var
 		if [ -n "$COMMAND" ] ; then
 			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
 			run_cmd
+			echo
+		else
+			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+			show_queue
+			echo
 		fi
 	fi
 elif [ -n "$LEMUR" ] ; then
@@ -794,6 +804,7 @@ elif [ -n "$LEMUR" ] ; then
 	else
 		echo "Creating multi room dev:${LEMUR} member_dev(s):${CHILD}"
 		create_multiroom
+		echo
 	fi
 	rm -f ${DEVLIST}
 	rm -f ${DEVALL}
@@ -806,20 +817,24 @@ elif [ -n "$BLUETOOTH" ] ; then
 				set_var
 				echo "bluetooth api list:"
 				list_bluetooth
+				echo
 			done < ${DEVALL}
 		else
 			set_var
 			echo "bluetooth api list:"
 			list_bluetooth
+			echo
 		fi
 	elif [ "$BLUETOOTH" = "null" ] ; then
 		set_var
 		echo "disconnecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} from bluetooth"
 		disconnect_bluetooth
+		echo
 	else
 		set_var
 		echo "connecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} to bluetooth device:${BLUETOOTH}"
 		connect_bluetooth
+		echo
 	fi
 elif [ -n "$STATIONID" ] ; then
 	set_var
