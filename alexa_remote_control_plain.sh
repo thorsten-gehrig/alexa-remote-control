@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-02-03: v0.11a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-02-10: v0.12 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -38,7 +38,7 @@ SET_OPTS='--compressed --http1.1'
 
 # browser identity
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
-#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:64.0) Gecko/20100101 Firefox/64.0'
+#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
 # tmp path
 SET_TMP="/tmp"
@@ -61,6 +61,7 @@ TMP=${TMP:-$SET_TMP}
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
 DEVTXT="${TMP}/.alexa.devicelist.txt"
+DEVALL="${TMP}/.alexa.devicelist.all"
 
 GUIVERSION=0
 
@@ -92,8 +93,8 @@ usage()
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>'"
-	echo "   -q : query queue"
 	echo "   -b : connect/disconnect/list bluetooth device"
+	echo "   -q : query queue"
 	echo "   -r : play tunein radio"
 	echo "   -s : play library track/library album"
 	echo "   -t : play Prime playlist"
@@ -324,6 +325,7 @@ log_in()
 
 rm -f ${DEVLIST}
 rm -f ${DEVTXT}
+rm -f ${DEVALL}
 rm -f ${COOKIE}
 
 #
@@ -388,6 +390,28 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 	if [ ! -f ${DEVTXT} ] ; then
 		cat ${DEVLIST}| sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' > ${DEVTXT}
 	fi
+	
+	# create a file that contains valid device names for the "ALL" device
+	ATTR="accountName"
+	NAME=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
+
+	ATTR="deviceFamily"
+	FAMILY=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
+
+	IDX=0
+	for N in $NAME ; do
+		C=0
+		for F in $FAMILY ; do
+			if [ $C -eq $IDX ] ; then
+				if [ "$F" = "WHA" -o "$F" = "ECHO" -o "$F" = "KNIGHT" -o "$F" = "ROOK" ] ; then
+					echo ${N} >> ${DEVALL}
+				fi
+				break
+			fi
+			C=$((C+1))
+		done
+		IDX=$((IDX+1))
+	done
 }
 
 check_status()
@@ -413,35 +437,35 @@ check_status()
 set_var()
 {
 	ATTR="accountName"
-	NAME=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+	NAME=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
 	ATTR="deviceType"
-	TYPE=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+	TYPE=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
 	ATTR="serialNumber"
-	SERIAL=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+	SERIAL=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
 #	ATTR="deviceOwnerCustomerId"
-#	MEDIAID=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+#	MEDIAID=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
 	ATTR="deviceFamily"
-	FAMILY=`grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g'`
+	FAMILY=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
 
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
-        	IDX=0
-		for I in $FAMILY ; do
-			if [ "$I" = "ECHO" -o "$I" = "KNIGHT" -o "$I" = "ROOK" ] ; then
-			break;
+        IDX=0
+		for F in $FAMILY ; do
+			if [ "$F" = "ECHO" -o "$F" = "KNIGHT" -o "$F" = "ROOK" ] ; then
+				break;
 			fi
 			IDX=$((IDX+1))
 		done
 
 		C=0
-		for I in $NAME ; do
+		for N in $NAME ; do
 			if [ $C -eq $IDX ] ; then
-				DEVICE=$I
+				DEVICE=$N
 				break
 			fi
 			C=$((C+1))
@@ -451,8 +475,8 @@ set_var()
 	else
 		DEVICE=`echo $DEVICE | sed 's/ /_/g'`
 		IDX=0
-		for I in $NAME ; do
-			if [ "$I" = "$DEVICE" ] ; then
+		for N in $NAME ; do
+			if [ "$N" = "$DEVICE" ] ; then
 				break;
 			fi
 			IDX=$((IDX+1))
@@ -471,18 +495,18 @@ set_var()
 #	done
 
 	C=0
-	for I in $TYPE ; do
+	for T in $TYPE ; do
 		if [ $C -eq $IDX ] ; then
-			DEVICETYPE=$I
+			DEVICETYPE=$T
 			break
 		fi
 		C=$((C+1))
 	done
 
 	C=0
-	for I in $SERIAL ; do
+	for S in $SERIAL ; do
 		if [ $C -eq $IDX ] ; then
-			DEVICESERIALNUMBER=$I
+			DEVICESERIALNUMBER=$S
 			break
 		fi
 		C=$((C+1))
@@ -704,6 +728,7 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Con
 
 rm -f ${DEVLIST}
 rm -f ${DEVTXT}
+rm -f ${DEVALL}
 rm -f ${COOKIE}
 }
 
@@ -729,7 +754,7 @@ if [ $? -eq 0 ] ; then
 	fi
 fi
 
-if [ ! -f ${DEVTXT} ] ; then
+if [ ! -f ${DEVTXT} -o ! -f ${DEVALL} ] ; then
 	echo "device list does not exist. downloading ..."
 	get_devlist
 	if [ ! -f ${DEVTXT} ] ; then
@@ -738,11 +763,25 @@ if [ ! -f ${DEVTXT} ] ; then
 	fi
 fi
 
-if [ -n "$COMMAND" ] ; then
-	set_var
-	if [ -n "$COMMAND" ] ; then
-		echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-		run_cmd
+if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
+	if [ "${DEVICE}" = "ALL" ] ; then
+		while IFS= read -r DEVICE ; do
+			set_var
+			if [ -n "$COMMAND" ] ; then
+				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
+				run_cmd
+				# in order to prevent a "Rate exceeded" we need to delay the command
+				sleep 1
+			else
+				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+				show_queue
+			fi
+		done < ${DEVALL}
+	else
+		if [ -n "$COMMAND" ] ; then
+			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
+			run_cmd
+		fi
 	fi
 elif [ -n "$LEMUR" ] ; then
 	DEVICE="${LEMUR}"
@@ -757,17 +796,28 @@ elif [ -n "$LEMUR" ] ; then
 		create_multiroom
 	fi
 	rm -f ${DEVLIST}
+	rm -f ${DEVALL}
 	rm -f ${DEVTXT}
 	get_devlist
 elif [ -n "$BLUETOOTH" ] ; then
-	set_var
-	if [ "$BLUETOOTH" = "null" ] ; then
+	if [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
+		if [ "${DEVICE}" = "ALL" ] ; then
+			while IFS= read -r DEVICE ; do
+				set_var
+				echo "bluetooth api list:"
+				list_bluetooth
+			done < ${DEVALL}
+		else
+			set_var
+			echo "bluetooth api list:"
+			list_bluetooth
+		fi
+	elif [ "$BLUETOOTH" = "null" ] ; then
+		set_var
 		echo "disconnecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} from bluetooth"
 		disconnect_bluetooth
-	elif [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
-		echo "bluetooth api list:"
-		list_bluetooth
 	else
+		set_var
 		echo "connecting dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} to bluetooth device:${BLUETOOTH}"
 		connect_bluetooth
 	fi
@@ -795,10 +845,6 @@ elif [ -n "$HIST" ] ; then
 	set_var
 	echo "playing PRIME historical queue ${HIST}"
 	play_prime_hist_queue
-elif [ -n "$QUEUE" ]; then
-	set_var
-	echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-	show_queue
 elif [ -n "$LIST" ] ; then
 	ATTR="accountName"
 	echo "the following devices exist in your account:"

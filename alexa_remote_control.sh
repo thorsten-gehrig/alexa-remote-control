@@ -37,6 +37,7 @@
 # 2018-06-18: v0.10b added Alexa routine execution
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
 # 2019-02-03: v0.11a fixed string escape for automation and speak commands
+# 2019-02-10: v0.12 added "-d ALL" to the plain version, lastalexa now checks for SUCCESS activityStatus
 #
 ###
 #
@@ -71,7 +72,7 @@ SET_OPTS='--compressed --http1.1'
 
 # browser identity
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
-#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:64.0) Gecko/20100101 Firefox/64.0'
+#SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
 # tmp path
 SET_TMP="/tmp"
@@ -770,9 +771,9 @@ last_alexa()
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
- "https://${ALEXA}/api/activities?startTime=&size=1&offset=1" | jq -r '.activities[0].sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
-# Serial number: | jq -r '.activities[0].sourceDeviceIds[0].serialNumber'
-# Device name:   | jq -r '.activities[0].sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+ "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+# Serial number: | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
+# Device name:   | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
  }
 
 #
@@ -826,6 +827,8 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
 				run_cmd
+				# in order to prevent a "Rate exceeded" we need to delay the command
+				sleep 1
 			else
 				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 				show_queue
