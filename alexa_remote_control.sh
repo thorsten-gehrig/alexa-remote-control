@@ -38,6 +38,7 @@
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
 # 2019-02-03: v0.11a fixed string escape for automation and speak commands
 # 2019-02-10: v0.12 added "-d ALL" to the plain version, lastalexa now checks for SUCCESS activityStatus
+# 2019-02-14: v0.12a reduced the number of replaced characters for TTS and automation
 #
 ###
 #
@@ -333,12 +334,12 @@ case "$COMMAND" in
 			;;
 	speak:*)
 			SEQUENCECMD='Alexa.Speak'
-			TTS=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?! ]//g')
+			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
 			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
 			;;
 	automation:*)
 			SEQUENCECMD='automation'
-			UTTERANCE=$(echo ${COMMAND##*:} | sed -r 's/[^-a-zA-Z0-9_,?! ]//g')
+			UTTERANCE=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
 			;;
 	weather)
 			SEQUENCECMD='Alexa.Weather.Play'
