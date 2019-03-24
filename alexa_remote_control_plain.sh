@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-02-14: v0.12a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-03-24: v0.13 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -13,12 +13,12 @@
 #
 ##########################################
 
-
 SET_EMAIL='amazon_account@email.address'
 SET_PASSWORD='Very_Secret_Amazon_Account_Password'
+#SET_MFA_SECRET='1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG'
 
-SET_LANGUAGE="de,en-US;q=0.7,en;q=0.3"
-#SET_LANGUAGE="en-US"
+SET_LANGUAGE='de,en-US;q=0.7,en;q=0.3'
+#SET_LANGUAGE='en-US'
 
 SET_TTS_LOCALE='de-DE'
 
@@ -52,6 +52,7 @@ SET_TMP="/tmp"
 # retrieving environment variables if any are set
 EMAIL=${EMAIL:-$SET_EMAIL}
 PASSWORD=${PASSWORD:-$SET_PASSWORD}
+MFA_SECRET=${MFA_SECRET:-$SET_MFA_SECRET}
 AMAZON=${AMAZON:-$SET_AMAZON}
 ALEXA=${ALEXA:-$SET_ALEXA}
 LANGUAGE=${LANGUAGE:-$SET_LANGUAGE}
@@ -344,6 +345,14 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
  -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
 
 #
+# add HOTP if using MFA
+#
+if [ ! -z "${MFA_SECRET}" ] ; then
+	OTP=$(oathtool --base32 --totp "${MFA_SECRET}")
+	PASSWORD="${PASSWORD}${OTP}"
+fi
+
+#
 # login with filled out form
 #  !!! referer now contains session in URL
 #
@@ -357,6 +366,11 @@ if [ -z "$(grep 'Location: https://alexa.*html' ${TMP}/.alexa.header2)" ] ; then
 	echo " make sure to have all Amazon related cookies deleted and Javascript disabled!"
 	echo
 	echo " (For more information have a look at ${TMP}/.alexa.login)"
+	echo
+	echo " To avoid issues with captcha, try using Multi-Factor Authentication."
+	echo " To do so, first set up Two-Step Verification on your Amazon account, then"
+	echo " configure this script (or the environment) with your MFA secret."
+	echo " Support for Multi-Factor Authentication requires 'oathtool' to be installed."
 
 	rm -f ${COOKIE}
 	rm -f "${TMP}/.alexa.header"
@@ -531,7 +545,7 @@ if [ -n "${SEQUENCECMD}" ]
 	then
 		ALEXACMD="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${TTS_LOCALE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
 
-		# Due to some weird shell-escape-behavior the command has t be written to a file before POSTing it
+		# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
 		echo $ALEXACMD > "${TMP}/.alexa.cmd"
 		
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
