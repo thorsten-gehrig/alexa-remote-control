@@ -345,7 +345,7 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
  -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
 
 #
-# add HOTP if using MFA
+# add OTP if using MFA
 #
 if [ ! -z "${MFA_SECRET}" ] ; then
 	OTP=$(oathtool --base32 --totp "${MFA_SECRET}")
