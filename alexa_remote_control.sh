@@ -39,6 +39,7 @@
 # 2019-02-03: v0.11a fixed string escape for automation and speak commands
 # 2019-02-10: v0.12 added "-d ALL" to the plain version, lastalexa now checks for SUCCESS activityStatus
 # 2019-02-14: v0.12a reduced the number of replaced characters for TTS and automation
+# 2019-05-01: Added commands: joke, calendartoday, calendartomorrow, goodnight
 #
 ###
 #
@@ -130,7 +131,7 @@ usage()
 	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
-	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>',automation:'<routine name>'"
+	echo "        weather,traffic,flashbriefing,goodmorning,goodnight,singasong,tellstory,speak:'<text>',joke,calendartoday,calendartomorrow,calendarnext,automation:'<routine name>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -r : play tunein radio"
@@ -353,6 +354,21 @@ case "$COMMAND" in
 	goodmorning)
 			SEQUENCECMD='Alexa.GoodMorning.Play'
 			;;
+    goodnight)
+            SEQUENCECMD='Alexa.GoodNight.Play'
+            ;;
+	joke)
+			SEQUENCECMD='Alexa.Joke.Play'
+			;;
+	calendartoday)
+	        SEQUENCECMD='Alexa.Calendar.PlayToday'
+	        ;;
+	calendartomorrow)
+	        SEQUENCECMD='Alexa.Calendar.PlayTomorrow'
+	        ;;
+	calendarnext)
+	        SEQUENCECMD='Alexa.Calendar.PlayNext'
+	        ;;
 	singasong)
 			SEQUENCECMD='Alexa.SingASong.Play'
 			;;

@@ -27,8 +27,8 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
                     -m <multiroom_device> [device_1 .. device_X] | -lastalexa
 
    -e : run command, additional SEQUENCECMDs:
-        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
-        speak:'<text>',automation:'<routine name>'
+        weather,traffic,flashbriefing,goodmorning,goodnight,singasong,tellstory,speak:'<text>',joke,calendartoday,
+        calendartomorrow,calendarnext,automation:'<routine name>'
    -b : connect/disconnect/list bluetooth device
    -q : query queue
    -r : play tunein radio
