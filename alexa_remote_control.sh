@@ -39,6 +39,7 @@
 # 2019-02-03: v0.11a fixed string escape for automation and speak commands
 # 2019-02-10: v0.12 added "-d ALL" to the plain version, lastalexa now checks for SUCCESS activityStatus
 # 2019-02-14: v0.12a reduced the number of replaced characters for TTS and automation
+# 2019-06-18: v0.12c fixed CSRF 
 #
 ###
 #
@@ -425,7 +426,8 @@ fi
 #
 ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- https://${ALEXA}/api/language > /dev/null
+ https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
+# https://${ALEXA}/api/language > /dev/null
 
 rm -f "${TMP}/.alexa.login"
 rm -f "${TMP}/.alexa.header"
