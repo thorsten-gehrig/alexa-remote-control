@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-02-14: v0.12a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-02-14: v0.12c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -371,7 +371,8 @@ fi
 #
 ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- https://${ALEXA}/api/language > /dev/null
+ https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
+# https://${ALEXA}/api/language > /dev/null
 
 rm -f "${TMP}/.alexa.login"
 rm -f "${TMP}/.alexa.header"
