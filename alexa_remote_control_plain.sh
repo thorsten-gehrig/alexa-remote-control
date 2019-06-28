@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-02-14: v0.12c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-06-28: v0.12c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -371,14 +371,32 @@ fi
 #
 ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
-# https://${ALEXA}/api/language > /dev/null
+ https://${ALEXA}/api/language > /dev/null
+
+if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+	echo "trying to get CSRF from handlebars"
+	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
+fi
+
+if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+	echo "trying to get CSRF from devices-v2"
+	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 https://${ALEXA}/api/devices-v2/device?cached=false > /dev/null
+fi
 
 rm -f "${TMP}/.alexa.login"
 rm -f "${TMP}/.alexa.header"
 rm -f "${TMP}/.alexa.header2"
 rm -f "${TMP}/.alexa.postdata"
 rm -f "${TMP}/.alexa.postdata2"
+
+if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+	echo "ERROR: no CSRF cookie received"
+	exit 1
+fi
 }
 
 #
