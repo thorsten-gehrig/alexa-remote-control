@@ -13,6 +13,7 @@ ALEXA     - the URL you would use for the Alexa Web App
 CURL      - location of your cURL binary
 OPTS      - any cURL options you require
 TMP       - location of the temp dir
+OATHTOOL  - command line for oathtool MFA
 ```
 You will very likely want to set the language to:
 ```
@@ -50,10 +51,15 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
  
 There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
+In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
+1. You should have MFA using an App already working before proceeding
+1. Add a new app
+1. When presented with the QR-code select "can't scan code"
+1. You will be presented with the MFA shared secret, something like `1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG`
+1. Now you have to generate a valid response code via `oathtool -b --totp "<MFA shared secret from above>"` and enter that in the web form
+1. Going from here the MFA shared secret becomes the MFA_SECRET for the alexa_remote_control script
+*Treat that MFA_SCECRET just like your password - DO NOT share it anywhere!!!*
+
+It is assumed that MFA secured accounts are less likely to get a captcha response during login - that's why MFA might yield better results if the plain username/password didn't work for you.
+
 http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
-
-
-
-
-
-

@@ -24,15 +24,15 @@
 # 2018-01-28: v0.8c added configurable browser string
 # 2018-02-17: v0.8d no need to write the cookie file on every "check_status"
 # 2018-02-27: v0.8e added "lastalexa" option for HA-Bridge to send its command to a specific device
-#		(Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
+#               (Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
 # 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
 # 2018-03-09: v0.9a workaround for login problem, force curl to use http1.1
 # 2018-05-17: v0.9b update browser string and accept language
 # 2018-05-23: v0.9c update accept language (again)
 # 2018-06-12: v0.10 introducing TTS and more
-#       (thanks to Michael Geramb and his openHAB2 Amazon Echo Control binding)
-#		https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
-#		(thanks to Ralf Otto for implementing this feature in this script)
+#               (thanks to Michael Geramb and his openHAB2 Amazon Echo Control binding)
+#               https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
+#               (thanks to Ralf Otto for implementing this feature in this script)
 # 2018-06-13: v0.10a added album play of imported library
 # 2018-06-18: v0.10b added Alexa routine execution
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
@@ -41,6 +41,8 @@
 # 2019-02-14: v0.12a reduced the number of replaced characters for TTS and automation
 # 2019-06-18: v0.12b fixed CSRF
 # 2019-06-28: v0.12c properly fixed CSRF
+# 2019-07-08: v0.13 added support for Multi-Factor Authentication
+#               (thanks to rich-gepp https://github.com/rich-gepp)
 #
 ###
 #
@@ -48,14 +50,18 @@
 # - requires cURL for web communication
 # - (GNU) sed and awk for extraction
 # - jq as command line JSON parser (optional for the fancy bits)
+# - oathtool as OATH one-time password tool (optional for two-factor authentication)
 #
 ##########################################
 
 SET_EMAIL='amazon_account@email.address'
 SET_PASSWORD='Very_Secret_Amazon_Account_Password'
+SET_MFA_SECRET=''
+# something like:
+#  1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG
 
-SET_LANGUAGE="de,en-US;q=0.7,en;q=0.3"
-#SET_LANGUAGE="en-US"
+SET_LANGUAGE='de,en-US;q=0.7,en;q=0.3'
+#SET_LANGUAGE='en-US'
 
 SET_TTS_LOCALE='de-DE'
 
@@ -79,6 +85,9 @@ SET_OPTS='--compressed --http1.1'
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
 #SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
+# oathtool command line tool
+SET_OATHTOOL='/usr/bin/oathtool'
+
 # tmp path
 SET_TMP="/tmp"
 
@@ -89,6 +98,7 @@ SET_TMP="/tmp"
 # retrieving environment variables if any are set
 EMAIL=${EMAIL:-$SET_EMAIL}
 PASSWORD=${PASSWORD:-$SET_PASSWORD}
+MFA_SECRET=${MFA_SECRET:-$SET_MFA_SECRET}
 AMAZON=${AMAZON:-$SET_AMAZON}
 ALEXA=${ALEXA:-$SET_ALEXA}
 LANGUAGE=${LANGUAGE:-$SET_LANGUAGE}
@@ -97,6 +107,7 @@ CURL=${CURL:-$SET_CURL}
 OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
+OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -400,6 +411,14 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
  -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
 
 #
+# add OTP if using MFA
+#
+if [ -n "${MFA_SECRET}" ] ; then
+	OTP=$(${OATHTOOL} -b --totp "${MFA_SECRET}")
+	PASSWORD="${PASSWORD}${OTP}"
+fi
+
+#
 # login with filled out form
 #  !!! referer now contains session in URL
 #
@@ -413,6 +432,11 @@ if [ -z "$(grep 'Location: https://alexa.*html' ${TMP}/.alexa.header2)" ] ; then
 	echo " make sure to have all Amazon related cookies deleted and Javascript disabled!"
 	echo
 	echo " (For more information have a look at ${TMP}/.alexa.login)"
+	echo
+	echo " To avoid issues with captcha, try using Multi-Factor Authentication."
+	echo " To do so, first set up Two-Step Verification on your Amazon account, then"
+	echo " configure this script (or the environment) with your MFA secret."
+	echo " Support for Multi-Factor Authentication requires 'oathtool' to be installed."
 
 	rm -f ${COOKIE}
 	rm -f "${TMP}/.alexa.header"
@@ -547,7 +571,7 @@ if [ -n "${SEQUENCECMD}" ]
 			ALEXACMD="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${TTS_LOCALE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
 		fi
 
-		# Due to some weird shell-escape-behavior the command has t be written to a file before POSTing it
+		# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
 		echo $ALEXACMD > "${TMP}/.alexa.cmd"
 
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
