@@ -51,4 +51,10 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
  
 There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
+In order to use MFA, one needs to obtain the MFA_SECRET from your Amazon account:
+1. You should have MFA using an App already working before proceeding
+1. Add a new app
+1. When presented with the QR-code select "can't scan code"
+1. You will be presented with the MFA shaed secret, something like `1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG`
+
 http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
