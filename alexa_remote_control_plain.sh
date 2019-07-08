@@ -44,8 +44,8 @@ SET_OPTS='--compressed --http1.1'
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
 #SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
-# oathtool command line
-SET_OATHTOOL='oathtool --base32 --totp'
+# oathtool command line tool
+SET_OATHTOOL='/usr/bin/oathtool'
 
 # tmp path
 SET_TMP="/tmp"
@@ -354,7 +354,7 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
 # add OTP if using MFA
 #
 if [ -n "${MFA_SECRET}" ] ; then
-	OTP=$(${OATHTOOL} "${MFA_SECRET}")
+	OTP=$(${OATHTOOL} -b --totp "${MFA_SECRET}")
 	PASSWORD="${PASSWORD}${OTP}"
 fi
 
