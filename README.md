@@ -13,6 +13,7 @@ ALEXA     - the URL you would use for the Alexa Web App
 CURL      - location of your cURL binary
 OPTS      - any cURL options you require
 TMP       - location of the temp dir
+OATHTOOL  - command line for oathtool MFA
 ```
 You will very likely want to set the language to:
 ```
@@ -51,9 +52,3 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
 There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
 http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
-
-
-
-
-
-

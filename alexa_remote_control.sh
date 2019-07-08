@@ -24,15 +24,15 @@
 # 2018-01-28: v0.8c added configurable browser string
 # 2018-02-17: v0.8d no need to write the cookie file on every "check_status"
 # 2018-02-27: v0.8e added "lastalexa" option for HA-Bridge to send its command to a specific device
-#		(Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
+#               (Markus Wennesheimer: https://wennez.wordpress.com/light-on-with-alexa-for-each-room/)
 # 2018-02-27: v0.9 unsuccessful logins will now give a short info how to debug the login
 # 2018-03-09: v0.9a workaround for login problem, force curl to use http1.1
 # 2018-05-17: v0.9b update browser string and accept language
 # 2018-05-23: v0.9c update accept language (again)
 # 2018-06-12: v0.10 introducing TTS and more
 #               (thanks to Michael Geramb and his openHAB2 Amazon Echo Control binding)
-#		https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
-#		(thanks to Ralf Otto for implementing this feature in this script)
+#               https://github.com/openhab/openhab2-addons/tree/master/addons/binding/org.openhab.binding.amazonechocontrol
+#               (thanks to Ralf Otto for implementing this feature in this script)
 # 2018-06-13: v0.10a added album play of imported library
 # 2018-06-18: v0.10b added Alexa routine execution
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
@@ -56,7 +56,9 @@
 
 SET_EMAIL='amazon_account@email.address'
 SET_PASSWORD='Very_Secret_Amazon_Account_Password'
-#SET_MFA_SECRET='1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG'
+SET_MFA_SECRET=''
+# something like:
+#  1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG
 
 SET_LANGUAGE='de,en-US;q=0.7,en;q=0.3'
 #SET_LANGUAGE='en-US'
@@ -83,6 +85,9 @@ SET_OPTS='--compressed --http1.1'
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
 #SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
+# oathtool command line
+SET_OATHTOOL='oathtool --base32 --totp'
+
 # tmp path
 SET_TMP="/tmp"
 
@@ -102,6 +107,7 @@ CURL=${CURL:-$SET_CURL}
 OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
+OATHTOOL=${OOATHTOOL:-$SET_OATHTOOL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -407,8 +413,8 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
 #
 # add OTP if using MFA
 #
-if [ ! -z "${MFA_SECRET}" ] ; then
-	OTP=$(oathtool --base32 --totp "${MFA_SECRET}")
+if [ -n "${MFA_SECRET}" ] ; then
+	OTP=$(${OATHTOOL} "${MFA_SECRET}")
 	PASSWORD="${PASSWORD}${OTP}"
 fi
 

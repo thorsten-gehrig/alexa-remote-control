@@ -15,7 +15,9 @@
 
 SET_EMAIL='amazon_account@email.address'
 SET_PASSWORD='Very_Secret_Amazon_Account_Password'
-#SET_MFA_SECRET='1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG'
+SET_MFA_SECRET=''
+# something like:
+#  1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG
 
 SET_LANGUAGE='de,en-US;q=0.7,en;q=0.3'
 #SET_LANGUAGE='en-US'
@@ -42,6 +44,9 @@ SET_OPTS='--compressed --http1.1'
 SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
 #SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0'
 
+# oathtool command line
+SET_OATHTOOL='oathtool --base32 --totp'
+
 # tmp path
 SET_TMP="/tmp"
 
@@ -61,6 +66,7 @@ CURL=${CURL:-$SET_CURL}
 OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
+OATHTOOL=${OOATHTOOL:-$SET_OATHTOOL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -347,8 +353,8 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language
 #
 # add OTP if using MFA
 #
-if [ ! -z "${MFA_SECRET}" ] ; then
-	OTP=$(oathtool --base32 --totp "${MFA_SECRET}")
+if [ -n "${MFA_SECRET}" ] ; then
+	OTP=$(${OATHTOOL} "${MFA_SECRET}")
 	PASSWORD="${PASSWORD}${OTP}"
 fi
 
