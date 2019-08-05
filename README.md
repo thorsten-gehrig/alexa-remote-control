@@ -14,6 +14,8 @@ CURL      - location of your cURL binary
 OPTS      - any cURL options you require
 TMP       - location of the temp dir
 OATHTOOL  - command line for oathtool MFA
+MFA_SECRET- the MFA secret
+SPEAKVOL  - the volume for speak messages
 ```
 You will very likely want to set the language to:
 ```
