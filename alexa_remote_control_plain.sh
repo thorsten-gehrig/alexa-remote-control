@@ -3,13 +3,14 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-07-08: v0.13 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-08-05: v0.14 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
 # (no BASHisms were used, should run with any shell)
 # - requires cURL for web communication
 # - (GNU) sed and awk for extraction
+# - oathtool as OATH one-time password tool (optional for two-factor authentication)
 #
 ##########################################
 
@@ -50,6 +51,11 @@ SET_OATHTOOL='/usr/bin/oathtool'
 # tmp path
 SET_TMP="/tmp"
 
+# Volume for speak commands
+SET_SPEAKVOL="30"
+# if no current playing volume can be determined, fall back to normal volume
+SET_NORMALVOL="10"
+
 ###########################################
 # nothing to configure below here
 #
@@ -67,6 +73,8 @@ OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
 OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
+SPEAKVOL=${SPEAKVOL:-$SET_SPEAKVOL}
+NORMALVOL=${NORMALVOL:-$SET_NORMALVOL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -80,6 +88,7 @@ LOGOFF=""
 COMMAND=""
 TTS=""
 SEQUENCECMD=""
+SEQUENCEVAL=""
 STATIONID=""
 QUEUE=""
 SONG=""
@@ -281,7 +290,9 @@ case "$COMMAND" in
 			VOL=${COMMAND##*:}
 			# volume as integer!
 			if [ $VOL -le 100 -a $VOL -ge 0 ] ; then
-				COMMAND='{"type":"VolumeLevelCommand","volumeLevel":'${VOL}'}'
+#				COMMAND='{"type":"VolumeLevelCommand","volumeLevel":'${VOL}'}'
+				SEQUENCECMD='Alexa.DeviceControls.Volume'
+				SEQUENCEVAL=',\"value\":\"'${VOL}'\"'
 			else
 				echo "ERROR: volume should be an integer between 0 and 100"
 				usage
@@ -566,19 +577,32 @@ set_var()
 #
 run_cmd()
 {
-if [ -n "${SEQUENCECMD}" ]
-	then
-		ALEXACMD="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${TTS_LOCALE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
+if [ -n "${SEQUENCECMD}" ] ; then
+	# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
+	if [ -n "${TTS}" ] ; then 
 
-		# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
-		echo $ALEXACMD > "${TMP}/.alexa.cmd"
-		
-		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+		# try to retrieve the "currently playing" volume
+		VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd"\
-		 "https://${ALEXA}/api/behaviors/preview"
+		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+		 "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | grep 'volume' | sed -r 's/^.*"volume":\s*([0-9]+)[^0-9]*$/\1/g')
 
-		rm -f "${TMP}/.alexa.cmd"
+		if [ -z "${VOL}" ] ; then VOL=$NORMALVOL ; fi
+
+		ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SPEAKVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+	else
+		ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
+	fi
+
+	# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
+	echo $ALEXACMD > "${TMP}/.alexa.cmd"
+
+	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd"\
+	 "https://${ALEXA}/api/behaviors/preview"
+
+	rm -f "${TMP}/.alexa.cmd"
 		 
 else
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\

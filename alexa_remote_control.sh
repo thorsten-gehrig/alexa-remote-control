@@ -43,6 +43,7 @@
 # 2019-06-28: v0.12c properly fixed CSRF
 # 2019-07-08: v0.13 added support for Multi-Factor Authentication
 #               (thanks to rich-gepp https://github.com/rich-gepp)
+# 2019-08-05: v0.14 added Volume setting via routine, and $SPEAKVOL
 #
 ###
 #
@@ -91,6 +92,11 @@ SET_OATHTOOL='/usr/bin/oathtool'
 # tmp path
 SET_TMP="/tmp"
 
+# Volume for speak commands
+SET_SPEAKVOL="30"
+# if no current playing volume can be determined, fall back to normal volume
+SET_NORMALVOL="10"
+
 ###########################################
 # nothing to configure below here
 #
@@ -108,6 +114,8 @@ OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
 OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
+SPEAKVOL=${SPEAKVOL:-$SET_SPEAKVOL}
+NORMALVOL=${NORMALVOL:-$SET_NORMALVOL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -120,6 +128,7 @@ COMMAND=""
 TTS=""
 UTTERANCE=""
 SEQUENCECMD=""
+SEQUENCEVAL=""
 STATIONID=""
 QUEUE=""
 SONG=""
@@ -338,7 +347,9 @@ case "$COMMAND" in
 			VOL=${COMMAND##*:}
 			# volume as integer!
 			if [ $VOL -le 100 -a $VOL -ge 0 ] ; then
-				COMMAND='{"type":"VolumeLevelCommand","volumeLevel":'${VOL}'}'
+#				COMMAND='{"type":"VolumeLevelCommand","volumeLevel":'${VOL}'}'
+				SEQUENCECMD='Alexa.DeviceControls.Volume'
+				SEQUENCEVAL=',\"value\":\"'${VOL}'\"'
 			else
 				echo "ERROR: volume should be an integer between 0 and 100"
 				usage
@@ -348,7 +359,7 @@ case "$COMMAND" in
 	speak:*)
 			SEQUENCECMD='Alexa.Speak'
 			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
-			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
+			TTS=',\"textToSpeak\":\"'${TTS}'\"'
 			;;
 	automation:*)
 			SEQUENCECMD='automation'
@@ -548,38 +559,51 @@ list_devices()
 #
 run_cmd()
 {
-if [ -n "${SEQUENCECMD}" ]
-	then
-		if [ "${SEQUENCECMD}" = 'automation' ] ; then
-
-			${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
-			 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-			 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-			 "https://${ALEXA}/api/behaviors/automations" > "${TMP}/.alexa.automation"
-
-			AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
-			if [ -z "${AUTOMATION}" ] ; then
-				echo "ERROR: no such utterance '${UTTERANCE}' in Alexa routines"
-				rm -f "${TMP}/.alexa.automation"
-				exit 1
-			fi
-			SEQUENCE=$(jq --arg utterance "${UTTERANCE}" -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
-			rm -f "${TMP}/.alexa.automation"
-
-			ALEXACMD="{\"behaviorId\":\"${AUTOMATION}\",\"sequenceJson\":\"${SEQUENCE}\",\"status\":\"ENABLED\"}"
-		else
-			ALEXACMD="{\"behaviorId\":\"PREVIEW\",\"sequenceJson\":\"{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.Sequence\\\",\\\"startNode\\\":{\\\"@type\\\":\\\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\\\",\\\"type\\\":\\\"${SEQUENCECMD}\\\",\\\"operationPayload\\\":{\\\"deviceType\\\":\\\"${DEVICETYPE}\\\",\\\"deviceSerialNumber\\\":\\\"${DEVICESERIALNUMBER}\\\",\\\"locale\\\":\\\"${TTS_LOCALE}\\\",\\\"customerId\\\":\\\"${MEDIAOWNERCUSTOMERID}\\\"${TTS}}}}\",\"status\":\"ENABLED\"}"
-		fi
-
-		# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
-		echo $ALEXACMD > "${TMP}/.alexa.cmd"
+if [ -n "${SEQUENCECMD}" ] ; then
+	if [ "${SEQUENCECMD}" = 'automation' ] ; then
 
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd" \
-		 "https://${ALEXA}/api/behaviors/preview"
+		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+		 "https://${ALEXA}/api/behaviors/automations" > "${TMP}/.alexa.automation"
 
-		rm -f "${TMP}/.alexa.cmd"
+		AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
+		if [ -z "${AUTOMATION}" ] ; then
+			echo "ERROR: no such utterance '${UTTERANCE}' in Alexa routines"
+			rm -f "${TMP}/.alexa.automation"
+			exit 1
+		fi
+		SEQUENCE=$(jq --arg utterance "${UTTERANCE}" -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
+		rm -f "${TMP}/.alexa.automation"
+
+		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
+	else
+		# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
+		if [ -n "${TTS}" ] ; then 
+
+			# try to retrieve the "currently playing" volume
+			VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+			 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+			 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+			 "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | grep 'volume' | sed -r 's/^.*"volume":\s*([0-9]+)[^0-9]*$/\1/g')
+
+			if [ -z "${VOL}" ] ; then VOL=$NORMALVOL ; fi
+
+			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SPEAKVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+		else
+			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
+		fi
+	fi
+
+	# Due to some weird shell-escape-behavior the command has to be written to a file before POSTing it
+	echo $ALEXACMD > "${TMP}/.alexa.cmd"
+
+	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd" \
+	 "https://${ALEXA}/api/behaviors/preview"
+
+	rm -f "${TMP}/.alexa.cmd"
 
 else
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
