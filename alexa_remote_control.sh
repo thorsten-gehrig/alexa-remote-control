@@ -44,6 +44,7 @@
 # 2019-07-08: v0.13 added support for Multi-Factor Authentication
 #               (thanks to rich-gepp https://github.com/rich-gepp)
 # 2019-08-05: v0.14 added Volume setting via routine, and $SPEAKVOL
+# 2019-11-18: v0.14a download 200 routines instead of only the first 20
 #
 ###
 #
@@ -565,7 +566,7 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 		 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-		 "https://${ALEXA}/api/behaviors/automations" > "${TMP}/.alexa.automation"
+		 "https://${ALEXA}/api/behaviors/automations?limit=200" > "${TMP}/.alexa.automation"
 
 		AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
 		if [ -z "${AUTOMATION}" ] ; then
