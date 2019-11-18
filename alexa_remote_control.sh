@@ -156,6 +156,7 @@ usage()
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>',automation:'<routine name>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
+	echo "   -n : query notifications"
 	echo "   -r : play tunein radio"
 	echo "   -s : play library track/library album"
 	echo "   -t : play Prime playlist"
@@ -302,6 +303,9 @@ while [ "$#" -gt 0 ] ; do
 			;;
 		-q)
 			QUEUE="true"
+			;;
+		-n)
+			NOTIFICATIONS="true"
 			;;
 		-lastalexa)
 			LASTALEXA="true"
@@ -773,6 +777,19 @@ show_queue()
 }
 
 #
+# show notifications and alarms
+#
+show_notifications()
+{
+	echo "/api/notifications"
+ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+ "https://${ALEXA}/api/notifications?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
+	echo
+}
+
+#
 # deletes a multiroom device
 #
 delete_multiroom()
@@ -861,7 +878,7 @@ rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 }
 
-if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
+if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
@@ -917,6 +934,34 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 		else
 			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 			show_queue
+			echo
+		fi
+	fi
+elif [ -n "$COMMAND" -o -n "$NOTIFICATIONS" ] ; then
+	if [ "${DEVICE}" = "ALL" ] ; then
+		while IFS= read -r DEVICE ; do
+			set_var
+			if [ -n "$COMMAND" ] ; then
+				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
+				run_cmd
+				# in order to prevent a "Rate exceeded" we need to delay the command
+				sleep 1
+				echo
+			else
+				echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+				show_notifications
+				echo
+			fi
+		done < ${DEVALL}
+	else
+		set_var
+		if [ -n "$COMMAND" ] ; then
+			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
+			run_cmd
+			echo
+		else
+			echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+			show_notifications
 			echo
 		fi
 	fi

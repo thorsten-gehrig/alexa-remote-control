@@ -24,7 +24,7 @@ export LANGUAGE='de,en-US;q=0.7,en;q=0.3'
 
 ```
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |
-                    -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -r <"station name"|stationid> |
+                    -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -n | -r <"station name"|stationid> |
                     -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> |
                     -w <playlistId> | -i | -p | -P | -S | -a |  -l | -h |
                     -m <multiroom_device> [device_1 .. device_X] | -lastalexa
@@ -34,6 +34,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
         speak:'<text>',automation:'<routine name>'
    -b : connect/disconnect/list bluetooth device
    -q : query queue
+   -n : query notifications
    -r : play tunein radio
    -s : play library track/library album
    -t : play Prime playlist
