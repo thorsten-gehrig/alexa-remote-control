@@ -45,6 +45,7 @@
 #               (thanks to rich-gepp https://github.com/rich-gepp)
 # 2019-08-05: v0.14 added Volume setting via routine, and $SPEAKVOL
 # 2019-11-18: v0.14a download 200 routines instead of only the first 20
+# 2019-12-06: v0.15 support iHeartRadio station ids
 #
 ###
 #
@@ -131,6 +132,7 @@ UTTERANCE=""
 SEQUENCECMD=""
 SEQUENCEVAL=""
 STATIONID=""
+IHEARTID=""
 QUEUE=""
 SONG=""
 ALBUM=""
@@ -148,7 +150,7 @@ LASTALEXA=""
 usage()
 {
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |"
-	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |"
+	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |  -c <iHeart stationid> |"
 	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
 	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
 	echo
@@ -158,6 +160,7 @@ usage()
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
 	echo "   -r : play tunein radio"
+	echo "   -c : play iHeartRadio station"
 	echo "   -s : play library track/library album"
 	echo "   -t : play Prime playlist"
 	echo "   -u : play Prime station"
@@ -232,6 +235,15 @@ while [ "$#" -gt 0 ] ; do
 					exit 1
 				fi
 			fi
+			;;
+		-c)
+			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
+				echo "ERROR: missing argument for ${1}"
+				usage
+				exit 1
+			fi
+			IHEARTID=$2
+			shift
 			;;
 		-s)
 			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
@@ -630,6 +642,17 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 }
 
 #
+# play iHeart radio station
+#
+play_iheart()
+{
+${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST\
+ "https://${ALEXA}/api/iheartradio/queue-and-play-live-station" -d '{"deviceSerialNumber": "'${DEVICESERIALNUMBER}'", "deviceType": "'${DEVICETYPE}'", "stationId": "'${IHEARTID}'", "mediaOwnerCustomerId": "'${MEDIAOWNERCUSTOMERID}'"}'
+}
+
+#
 # play library track
 #
 play_song()
@@ -878,7 +901,7 @@ rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 }
 
-if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
+if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$IHEARTID" -a -z "$SONG" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
@@ -1014,6 +1037,10 @@ elif [ -n "$STATIONID" ] ; then
 	set_var
 	echo "playing stationID:${STATIONID} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} mediaownerid:${MEDIAOWNERCUSTOMERID}"
 	play_radio
+elif [ -n "$IHEARTID" ] ; then
+	set_var
+	echo "playing stationID:${STATIONID} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} mediaownerid:${MEDIAOWNERCUSTOMERID}"
+	play_iheart
 elif [ -n "$SONG" ] ; then
 	set_var
 	echo "playing library track:${SONG} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} mediaownerid:${MEDIAOWNERCUSTOMERID}"
