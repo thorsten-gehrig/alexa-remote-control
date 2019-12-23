@@ -45,6 +45,7 @@
 #               (thanks to rich-gepp https://github.com/rich-gepp)
 # 2019-08-05: v0.14 added Volume setting via routine, and $SPEAKVOL
 # 2019-11-18: v0.14a download 200 routines instead of only the first 20
+# 2019-12-23: v0.14b Trigger routines by either utterance or routine name
 #
 ###
 #
@@ -570,11 +571,14 @@ if [ -n "${SEQUENCECMD}" ] ; then
 
 		AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
 		if [ -z "${AUTOMATION}" ] ; then
-			echo "ERROR: no such utterance '${UTTERANCE}' in Alexa routines"
-			rm -f "${TMP}/.alexa.automation"
-			exit 1
+			AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .name == $utterance) | .automationId' "${TMP}/.alexa.automation")
+			if [ -z "${AUTOMATION}" ] ; then
+				echo "ERROR: no such utterance '${UTTERANCE}' in Alexa routines"
+				rm -f "${TMP}/.alexa.automation"
+				exit 1
+			fi
 		fi
-		SEQUENCE=$(jq --arg utterance "${UTTERANCE}" -r -c '.[] | select( .triggers[].payload.utterance == $utterance) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
+		SEQUENCE=$(jq --arg automation "${AUTOMATION}" -r -c '.[] | select( .automationId == $automation) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
 		rm -f "${TMP}/.alexa.automation"
 
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
