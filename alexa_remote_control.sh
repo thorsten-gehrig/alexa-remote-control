@@ -46,6 +46,7 @@
 # 2019-08-05: v0.14 added Volume setting via routine, and $SPEAKVOL
 # 2019-11-18: v0.14a download 200 routines instead of only the first 20
 # 2019-12-23: v0.14b Trigger routines by either utterance or routine name
+# 2019-12-30: v0.15 re-worked the volume setting for TTS commands
 #
 ###
 #
@@ -99,6 +100,11 @@ SET_SPEAKVOL="30"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
 
+# Device specific volumes (overriding the above)
+SET_DEVICEVOLNAME="EchoDot2ndGen  Echo1stGen"
+SET_DEVICEVOLSPEAK="100 30"
+SET_DEVICEVOLNORMAL="100 20"
+
 ###########################################
 # nothing to configure below here
 #
@@ -118,6 +124,9 @@ TMP=${TMP:-$SET_TMP}
 OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
 SPEAKVOL=${SPEAKVOL:-$SET_SPEAKVOL}
 NORMALVOL=${NORMALVOL:-$SET_NORMALVOL}
+DEVICEVOLNAME=${DEVICEVOLNAME:-$SET_DEVICEVOLNAME}
+DEVICEVOLSPEAK=${DEVICEVOLSPEAK:-$SET_DEVICEVOLSPEAK}
+DEVICEVOLNORMAL=${DEVICEVOLNORMAL:-$SET_DEVICEVOLNORMAL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -536,6 +545,7 @@ set_var()
 
 	DEVICETYPE=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceType' ${DEVLIST})
 	DEVICESERIALNUMBER=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .serialNumber' ${DEVLIST})
+	DEVICEFAMILY=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceFamily' ${DEVLIST})
 
 	# customerId is now retrieved from the logged in user
 	# the customerId in the device list is always from the user registering the device initially
@@ -585,6 +595,31 @@ if [ -n "${SEQUENCECMD}" ] ; then
 	else
 		# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
 		if [ -n "${TTS}" ] ; then 
+			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
+				echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
+				return
+			fi
+			SVOL=$SPEAKVOL
+
+			# Not using arrays here in order to be compatible with non-Bash
+			# Get the list position of the current device type
+			IDX=0
+			for D in $DEVICEVOLNAME ; do
+				if [ "${D}" = "${DEVICE}" ] ; then
+					break;
+				fi
+				IDX=$((IDX+1))
+			done
+
+			# get the speak volume at that position
+			C=0
+			for D in $DEVICEVOLSPEAK ; do
+				if [ $C -eq $IDX ] ; then
+					if [ -n "${D}" ] ; then SVOL=$D ; fi 
+					break
+				fi
+				C=$((C+1))
+			done
 
 			# try to retrieve the "currently playing" volume
 			VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
@@ -592,9 +627,23 @@ if [ -n "${SEQUENCECMD}" ] ; then
 			 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
 			 "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | grep 'volume' | sed -r 's/^.*"volume":\s*([0-9]+)[^0-9]*$/\1/g')
 
-			if [ -z "${VOL}" ] ; then VOL=$NORMALVOL ; fi
+			if [ -z "${VOL}" ] ; then
+				# get the normal volume of the current device type
+				C=0
+				for D in $DEVICEVOLNORMAL; do
+					if [ $C -eq $IDX ] ; then
+						VOL=$D
+						break
+					fi
+					C=$((C+1))
+				done
+				# if the volume is still undefined, use $NORMALVOL
+				if [ -z "${VOL}" ] ; then
+					VOL=$NORMALVOL
+				fi
+			fi
 
-			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SPEAKVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
 		else
 			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
 		fi
@@ -898,7 +947,7 @@ fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+		for DEVICE in $( jq -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"

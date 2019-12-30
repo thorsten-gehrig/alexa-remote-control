@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-11-18: v0.14a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2019-12-30: v0.15 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -56,6 +56,11 @@ SET_SPEAKVOL="30"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
 
+# Device specific volumes (overriding the above)
+SET_DEVICEVOLNAME="EchoDot2ndGen  Echo1stGen"
+SET_DEVICEVOLSPEAK="100 30"
+SET_DEVICEVOLNORMAL="100 20"
+
 ###########################################
 # nothing to configure below here
 #
@@ -75,6 +80,9 @@ TMP=${TMP:-$SET_TMP}
 OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
 SPEAKVOL=${SPEAKVOL:-$SET_SPEAKVOL}
 NORMALVOL=${NORMALVOL:-$SET_NORMALVOL}
+DEVICEVOLNAME=${DEVICEVOLNAME:-$SET_DEVICEVOLNAME}
+DEVICEVOLSPEAK=${DEVICEVOLSPEAK:-$SET_DEVICEVOLSPEAK}
+DEVICEVOLNORMAL=${DEVICEVOLNORMAL:-$SET_DEVICEVOLNORMAL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -504,6 +512,8 @@ set_var()
 	ATTR="deviceFamily"
 	FAMILY=$(grep ${ATTR}\| ${DEVTXT} | sed "s/^.*${ATTR}|//" | sed 's/ /_/g')
 
+	ATTR="online"
+	ONLINE=$(grep ${ATTR}\: ${DEVTXT} | sed "s/^.*${ATTR}://")
 
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
@@ -565,6 +575,24 @@ set_var()
 		C=$((C+1))
 	done
 
+	C=0
+	for F in $FAMILY ; do
+		if [ $C -eq $IDX ] ; then
+			DEVICEFAMILY=$F
+			break
+		fi
+		C=$((C+1))
+	done
+
+	C=0
+	for O in $ONLINE ; do
+		if [ $C -eq $IDX ] ; then
+			DEVICESTATE=$O
+			break
+		fi
+		C=$((C+1))
+	done
+
 	if [ -z "${DEVICESERIALNUMBER}" ] ; then
 		echo "ERROR: unkown device dev:${DEVICE}"
 		exit 1
@@ -580,6 +608,31 @@ run_cmd()
 if [ -n "${SEQUENCECMD}" ] ; then
 	# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
 	if [ -n "${TTS}" ] ; then 
+		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
+			echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
+			return
+		fi
+		SVOL=$SPEAKVOL
+
+		# Not using arrays here in order to be compatible with non-Bash
+		# Get the list position of the current device type
+		IDX=0
+		for D in $DEVICEVOLNAME ; do
+			if [ "${D}" = "${DEVICE}" ] ; then
+				break;
+			fi
+			IDX=$((IDX+1))
+		done
+
+		# get the speak volume at that position
+		C=0
+		for D in $DEVICEVOLSPEAK ; do
+			if [ $C -eq $IDX ] ; then
+				if [ -n "${D}" ] ; then SVOL=$D ; fi 
+				break
+			fi
+			C=$((C+1))
+		done
 
 		# try to retrieve the "currently playing" volume
 		VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
@@ -587,9 +640,26 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
 		 "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | grep 'volume' | sed -r 's/^.*"volume":\s*([0-9]+)[^0-9]*$/\1/g')
 
-		if [ -z "${VOL}" ] ; then VOL=$NORMALVOL ; fi
+		# in order to prevent a "Rate exceeded" we need to delay the command
+		sleep 1
 
-		ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SPEAKVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+		if [ -z "${VOL}" ] ; then
+			# get the normal volume of the current device type
+			C=0
+			for D in $DEVICEVOLNORMAL; do
+				if [ $C -eq $IDX ] ; then
+					VOL=$D
+					break
+				fi
+				C=$((C+1))
+			done
+			# if the volume is still undefined, use $NORMALVOL
+			if [ -z "${VOL}" ] ; then
+				VOL=$NORMALVOL
+			fi
+		fi
+
+		ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
 	else
 		ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
 	fi
@@ -832,16 +902,18 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
 		while IFS= read -r DEVICE ; do
 			set_var
-			if [ -n "$COMMAND" ] ; then
-				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-				run_cmd
-				# in order to prevent a "Rate exceeded" we need to delay the command
-				sleep 1
-				echo
-			else
-				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-				show_queue
-				echo
+			if [ "$DEVICESTATE" = "true" ] ; then
+				if [ -n "$COMMAND" ] ; then
+					echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
+					run_cmd
+					# in order to prevent a "Rate exceeded" we need to delay the command
+					sleep 1
+					echo
+				else
+					echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+					show_queue
+					echo
+				fi
 			fi
 		done < ${DEVALL}
 	else
