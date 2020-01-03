@@ -16,6 +16,11 @@ TMP       - location of the temp dir
 OATHTOOL  - command line for oathtool MFA
 MFA_SECRET- the MFA secret
 SPEAKVOL  - the volume for speak messages
+NORMALVOL - if no current playing volume can be determined, fall back to normal volume
+VOLMAXAGE - max. age in minutes before volume is re-read from API
+DEVICEVOLNAME   - a list of device names with specific volume settings (space separated)
+DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
+DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
 ```
 You will very likely want to set the language to:
 ```
@@ -26,7 +31,7 @@ export LANGUAGE='de,en-US;q=0.7,en;q=0.3'
 alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |
                     -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -r <"station name"|stationid> |
                     -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> |
-                    -w <playlistId> | -i | -p | -P | -S | -a |  -l | -h |
+                    -w <playlistId> | -i | -p | -P | -S | -a | -z | -l | -h |
                     -m <multiroom_device> [device_1 .. device_X] | -lastalexa
 
    -e : run command, additional SEQUENCECMDs:
@@ -47,11 +52,12 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -a : list available devices
    -m : delete multiroom and/or create new multiroom containing devices
    -lastalexa : print device that received the last voice command
+   -z : print current volume level
    -l : logoff
    -h : help
 ```
  
-There's also a "plain" version, which lacks some functionality (-i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
+There's also a "plain" version, which lacks some functionality (-z, -i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
 In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
 1. You should have MFA using an App already working before proceeding
