@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2019-12-30: v0.15 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2020-01-08: v0.15b (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -110,11 +110,12 @@ CHILD=""
 PLIST=""
 BLUETOOTH=""
 LASTALEXA=""
+NOTIFICATIONS=""
 
 usage()
 {
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |"
-	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -r <\"station name\"|stationid> |"
+	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -n | -r <\"station name\"|stationid> |"
 	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
 	echo "          -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
 	echo
@@ -915,7 +916,7 @@ if [ ! -f ${DEVTXT} -o ! -f ${DEVALL} ] ; then
 	fi
 fi
 
-if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
+if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
 		while IFS= read -r DEVICE ; do
 			set_var
@@ -926,6 +927,9 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 					# in order to prevent a "Rate exceeded" we need to delay the command
 					sleep 1
 					echo
+				elif [ -n "$NOTIFICATIONS" ] ; then
+					echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+					show_notifications
 				else
 					echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 					show_queue
@@ -939,37 +943,12 @@ if [ -n "$COMMAND" -o -n "$QUEUE" ] ; then
 			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
 			run_cmd
 			echo
+		elif [ -n "$NOTIFICATIONS" ] ; then
+			echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+			show_notifications
 		else
 			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 			show_queue
-			echo
-		fi
-	fi
-elif [ -n "$COMMAND" -o -n "$NOTIFICATIONS" ] ; then
-	if [ "${DEVICE}" = "ALL" ] ; then
-		while IFS= read -r DEVICE ; do
-			set_var
-			if [ -n "$COMMAND" ] ; then
-				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-				run_cmd
-				# in order to prevent a "Rate exceeded" we need to delay the command
-				sleep 1
-				echo
-			else
-				echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-				show_notifications
-				echo
-			fi
-		done < ${DEVALL}
-	else
-		set_var
-		if [ -n "$COMMAND" ] ; then
-			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-			run_cmd
-			echo
-		else
-			echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-			show_notifications
 			echo
 		fi
 	fi

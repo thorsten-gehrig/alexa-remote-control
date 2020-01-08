@@ -48,6 +48,7 @@
 # 2019-12-23: v0.14b Trigger routines by either utterance or routine name
 # 2019-12-30: v0.15 re-worked the volume setting for TTS commands
 # 2020-01-03: v0.15a introduce some proper "get_volume"
+# 2020-01-08: v0.15b cleaned merge errors
 #
 ###
 #
@@ -160,6 +161,7 @@ PLIST=""
 BLUETOOTH=""
 LASTALEXA=""
 GETVOL=""
+NOTIFICATIONS=""
 
 usage()
 {
@@ -1013,7 +1015,7 @@ if [ ! -f ${DEVLIST} ] ; then
 	fi
 fi
 
-if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$GETVOL" ] ; then
+if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
 		for DEVICE in $( jq -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
 			set_var
@@ -1026,6 +1028,9 @@ if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$GETVOL" ] ; then
 			elif [ -n "$GETVOL" ] ; then
 				echo "get volume for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 				get_volume
+			elif [ -n "$NOTIFICATIONS" ] ; then
+				echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+				show_notifications
 			else
 				echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 				show_queue
@@ -1041,37 +1046,12 @@ if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$GETVOL" ] ; then
 		elif [ -n "$GETVOL" ] ; then
 			echo "get volume for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 			get_volume
+		elif [ -n "$NOTIFICATIONS" ] ; then
+			echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
+			show_notifications
 		else
 			echo "queue info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
 			show_queue
-			echo
-		fi
-	fi
-elif [ -n "$COMMAND" -o -n "$NOTIFICATIONS" ] ; then
-	if [ "${DEVICE}" = "ALL" ] ; then
-		while IFS= read -r DEVICE ; do
-			set_var
-			if [ -n "$COMMAND" ] ; then
-				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-				run_cmd
-				# in order to prevent a "Rate exceeded" we need to delay the command
-				sleep 1
-				echo
-			else
-				echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-				show_notifications
-				echo
-			fi
-		done < ${DEVALL}
-	else
-		set_var
-		if [ -n "$COMMAND" ] ; then
-			echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
-			run_cmd
-			echo
-		else
-			echo "notifications info for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}"
-			show_notifications
 			echo
 		fi
 	fi
