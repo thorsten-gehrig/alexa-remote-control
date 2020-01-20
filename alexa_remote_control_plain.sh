@@ -139,6 +139,10 @@ usage()
 
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
+		--version)
+			echo "v0.15b"
+			exit 0
+			;;
 		-d)
 			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
 				echo "ERROR: missing argument for ${1}"
