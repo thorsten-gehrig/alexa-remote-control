@@ -188,13 +188,17 @@ usage()
 	echo "   -a : list available devices"
 	echo "   -m : delete multiroom and/or create new multiroom containing devices"
 	echo "   -lastalexa : print device that received the last voice command"
-	echo "   -z : print current volume level"   
+	echo "   -z : print current volume level"
 	echo "   -l : logoff"
 	echo "   -h : help"
 }
 
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
+		--version)
+			echo "v0.15b"
+			exit 0
+			;;
 		-d)
 			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
 				echo "ERROR: missing argument for ${1}"
