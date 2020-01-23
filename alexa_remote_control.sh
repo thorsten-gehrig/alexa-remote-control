@@ -189,6 +189,7 @@ usage()
 	echo "   -m : delete multiroom and/or create new multiroom containing devices"
 	echo "   -lastalexa : print device that received the last voice command"
 	echo "   -z : print current volume level"
+	echo "   -login : Logs in, without further command"
 	echo "   -l : logoff"
 	echo "   -h : help"
 }
@@ -305,6 +306,9 @@ while [ "$#" -gt 0 ] ; do
 			fi
 			PLIST=$2
 			shift
+			;;
+		-login)
+			LOGIN="true"
 			;;
 		-l)
 			LOGOFF="true"
@@ -1017,6 +1021,11 @@ if [ ! -f ${DEVLIST} ] ; then
 		echo "failed to download device list, aborting"
 		exit 1
 	fi
+fi
+
+if [ -n "$LOGIN" ] ; then
+	echo "logged in"
+	exit 0
 fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; then
