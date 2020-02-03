@@ -49,6 +49,7 @@
 # 2019-12-30: v0.15 re-worked the volume setting for TTS commands
 # 2020-01-03: v0.15a introduce some proper "get_volume"
 # 2020-01-08: v0.15b cleaned merge errors
+# 2020-02-03: v0.15c SPEAKVOL of 0 leaves the volume setting untouched
 #
 ###
 #
@@ -97,7 +98,7 @@ SET_OATHTOOL='/usr/bin/oathtool'
 # tmp path
 SET_TMP="/tmp"
 
-# Volume for speak commands
+# Volume for speak commands (a SPEAKVOL of 0 leaves the volume settings untouched)
 SET_SPEAKVOL="30"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
@@ -197,7 +198,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.15b"
+			echo "v0.15c"
 			exit 0
 			;;
 		-d)
@@ -392,9 +393,10 @@ case "$COMMAND" in
 			fi
 			;;
 	speak:*)
-			SEQUENCECMD='Alexa.Speak'
 			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
 			TTS=',\"textToSpeak\":\"'${TTS}'\"'
+			SEQUENCECMD='Alexa.Speak'
+			SEQUENCEVAL=$TTS
 			;;
 	automation:*)
 			SEQUENCECMD='automation'
@@ -617,12 +619,14 @@ if [ -n "${SEQUENCECMD}" ] ; then
 
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
 	else
-		# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
-		if [ -n "${TTS}" ] ; then 
+		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak" ; then
 			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 				echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 				return
 			fi
+		fi
+		# the speak command is treated differently if $SPEAKVOL is > 0
+		if [ -n "${TTS}" -a $SPEAKVOL -gt 0 ] ; then
 			SVOL=$SPEAKVOL
 
 			# Not using arrays here in order to be compatible with non-Bash

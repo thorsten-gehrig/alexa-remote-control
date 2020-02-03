@@ -15,7 +15,7 @@ OPTS      - any cURL options you require
 TMP       - location of the temp dir
 OATHTOOL  - command line for oathtool MFA
 MFA_SECRET- the MFA secret
-SPEAKVOL  - the volume for speak messages
+SPEAKVOL  - the volume for speak messages ( if set to 0, volume levels are left untouched)
 NORMALVOL - if no current playing volume can be determined, fall back to normal volume
 VOLMAXAGE - max. age in minutes before volume is re-read from API
 DEVICEVOLNAME   - a list of device names with specific volume settings (space separated)
@@ -53,6 +53,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -a : list available devices
    -m : delete multiroom and/or create new multiroom containing devices
    -lastalexa : print device that received the last voice command
+   -login     : Logs in, without further command (downloads cookie)
    -z : print current volume level
    -l : logoff
    -h : help
