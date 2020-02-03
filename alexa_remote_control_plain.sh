@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2020-01-08: v0.15b (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2020-02-03: v0.15c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -51,7 +51,7 @@ SET_OATHTOOL='/usr/bin/oathtool'
 # tmp path
 SET_TMP="/tmp"
 
-# Volume for speak commands
+# Volume for speak commands (a SPEAKVOL of 0 leaves the volume settings untouched)
 SET_SPEAKVOL="30"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
@@ -321,9 +321,10 @@ case "$COMMAND" in
 			fi
 			;;
 	speak:*)
-			SEQUENCECMD='Alexa.Speak'
 			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
-			TTS=",\\\"textToSpeak\\\":\\\"${TTS}\\\""
+			TTS=',\"textToSpeak\":\"'${TTS}'\"'
+			SEQUENCECMD='Alexa.Speak'
+			SEQUENCEVAL=$TTS
 			;;
 	weather)
 			SEQUENCECMD='Alexa.Weather.Play'
@@ -619,12 +620,14 @@ set_var()
 run_cmd()
 {
 if [ -n "${SEQUENCECMD}" ] ; then
-	# the speak command is treated differently in that the wolume gets set to $SPEAKVOL
-	if [ -n "${TTS}" ] ; then 
+	if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak" ; then
 		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 			echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 			return
 		fi
+	fi
+	# the speak command is treated differently if $SPEAKVOL > 0
+	if [ -n "${TTS}" -a $SPEAKVOL -gt 0 ] ; then
 		SVOL=$SPEAKVOL
 
 		# Not using arrays here in order to be compatible with non-Bash
