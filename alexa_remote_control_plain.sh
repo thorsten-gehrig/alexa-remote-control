@@ -141,7 +141,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.15b"
+			echo "v0.15c"
 			exit 0
 			;;
 		-d)
