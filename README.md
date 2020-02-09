@@ -21,6 +21,9 @@ VOLMAXAGE - max. age in minutes before volume is re-read from API
 DEVICEVOLNAME   - a list of device names with specific volume settings (space separated)
 DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
 DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
+USE_ANNOUNCEMENT_FOR_SPEAK - Announcements can be made to multiple devices, while
+                                                       regular SPEAK cannot but the announcement feature has
+													   to be turned on for those devices. Also supports SSML!
 ```
 You will very likely want to set the language to:
 ```
@@ -36,7 +39,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
 
    -e : run command, additional SEQUENCECMDs:
         weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
-        speak:'<text>',automation:'<routine name>'
+        speak:'<text/ssml>',automation:'<routine name>,sound:<soundeffect_name>'
    -b : connect/disconnect/list bluetooth device
    -q : query queue
    -n : query notifications

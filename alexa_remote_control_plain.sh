@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2020-02-03: v0.15c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2020-02-09: v0.16a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -52,7 +52,7 @@ SET_OATHTOOL='/usr/bin/oathtool'
 SET_TMP="/tmp"
 
 # Volume for speak commands (a SPEAKVOL of 0 leaves the volume settings untouched)
-SET_SPEAKVOL="30"
+SET_SPEAKVOL="0"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
 
@@ -120,7 +120,8 @@ usage()
 	echo "          -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -l | -h"
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
-	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>'"
+	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
+	echo "        speak:'<text>'sound:<soundeffect_name>"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
@@ -141,7 +142,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.15c"
+			echo "v0.16a"
 			exit 0
 			;;
 		-d)
@@ -325,6 +326,10 @@ case "$COMMAND" in
 			TTS=',\"textToSpeak\":\"'${TTS}'\"'
 			SEQUENCECMD='Alexa.Speak'
 			SEQUENCEVAL=$TTS
+			;;
+	sound:*)
+			SEQUENCECMD='Alexa.Sound'
+			SEQUENCEVAL=',\"soundStringId\":\"'${COMMAND##sound:}'\"'
 			;;
 	weather)
 			SEQUENCECMD='Alexa.Weather.Play'
@@ -620,7 +625,7 @@ set_var()
 run_cmd()
 {
 if [ -n "${SEQUENCECMD}" ] ; then
-	if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak" ; then
+	if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak|sound" ; then
 		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 			echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 			return
