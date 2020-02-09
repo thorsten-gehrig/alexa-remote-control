@@ -50,6 +50,8 @@
 # 2020-01-03: v0.15a introduce some proper "get_volume"
 # 2020-01-08: v0.15b cleaned merge errors
 # 2020-02-03: v0.15c SPEAKVOL of 0 leaves the volume setting untouched
+# 2020-02-09: v0.16 TTS to Multiroom groups via USE_ANNOUNCEMENT_FOR_SPEAK + SSML for TTS
+#               (!!! requires Announcement feature to be enabled in each device !!!)
 #
 ###
 #
@@ -99,7 +101,7 @@ SET_OATHTOOL='/usr/bin/oathtool'
 SET_TMP="/tmp"
 
 # Volume for speak commands (a SPEAKVOL of 0 leaves the volume settings untouched)
-SET_SPEAKVOL="30"
+SET_SPEAKVOL="0"
 # if no current playing volume can be determined, fall back to normal volume
 SET_NORMALVOL="10"
 
@@ -110,6 +112,10 @@ SET_VOLMAXAGE="30"
 SET_DEVICEVOLNAME="EchoDot2ndGen  Echo1stGen"
 SET_DEVICEVOLSPEAK="100 30"
 SET_DEVICEVOLNORMAL="100 20"
+
+# Announcements can be made to multiple devices, while regular SPEAK cannot
+# but the notification feature has to be turned on for those devices
+SET_USE_ANNOUNCEMENT_FOR_SPEAK="0"
 
 ###########################################
 # nothing to configure below here
@@ -134,6 +140,7 @@ VOLMAXAGE=${VOLMAXAGE:-$SET_VOLMAXAGE}
 DEVICEVOLNAME=${DEVICEVOLNAME:-$SET_DEVICEVOLNAME}
 DEVICEVOLSPEAK=${DEVICEVOLSPEAK:-$SET_DEVICEVOLSPEAK}
 DEVICEVOLNORMAL=${DEVICEVOLNORMAL:-$SET_DEVICEVOLNORMAL}
+USE_ANNOUNCEMENT_FOR_SPEAK=${USE_ANNOUNCEMENT_FOR_SPEAK:-$SET_USE_ANNOUNCEMENT_FOR_SPEAK}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist.json"
@@ -198,7 +205,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.15c"
+			echo "v0.16"
 			exit 0
 			;;
 		-d)
@@ -393,14 +400,22 @@ case "$COMMAND" in
 			fi
 			;;
 	speak:*)
-			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
-			TTS=',\"textToSpeak\":\"'${TTS}'\"'
-			SEQUENCECMD='Alexa.Speak'
-			SEQUENCEVAL=$TTS
+			TTS=$(echo ${COMMAND##speak:} | sed -r s/\"/\'/g)
+			if [ $USE_ANNOUNCEMENT_FOR_SPEAK -gt 0 ] ; then
+				if echo $TTS | grep -q -v -E '^<speak>.*<\/speak>$' ;  then
+					# always sending SSML, since this skips the announcement "bing"
+					TTS="<speak>${TTS}</speak>"
+				fi
+				SEQUENCECMD='AlexaAnnouncement'
+			else
+				TTS=',\"textToSpeak\":\"'${TTS}'\"'
+				SEQUENCECMD='Alexa.Speak'
+				SEQUENCEVAL=$TTS
+			fi
 			;;
 	automation:*)
 			SEQUENCECMD='automation'
-			UTTERANCE=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
+			UTTERANCE=$(echo ${COMMAND##automation:} | sed -r 's/["\\]/ /g')
 			;;
 	weather)
 			SEQUENCECMD='Alexa.Weather.Play'
@@ -619,12 +634,41 @@ if [ -n "${SEQUENCECMD}" ] ; then
 
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
 	else
-		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak" ; then
+		# SequenceCommands are generally not supported on WHA devices
+		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory" ; then
 			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 				echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 				return
 			fi
 		fi
+		# some commands support an array of devices - try to find the clusterMembers if a WHA device was supplied
+		if echo $COMMAND | grep -q -E "speak" ; then
+			MEMBER='{\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"deviceTypeId\":\"'${DEVICETYPE}'\"}'
+			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
+				if [ $USE_ANNOUNCEMENT_FOR_SPEAK -gt 0 ] ; then
+					MEMBER=""
+					MEMBERDEVICES=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .clusterMembers[]' ${DEVLIST})
+					for MEMBERSERIAL in $MEMBERDEVICES ; do
+						MEMBERTYPE=$(jq --arg device "${MEMBERSERIAL}" -r '.devices[] | select(.serialNumber == $device) | .deviceType' ${DEVLIST})
+						if [ -n "${MEMBER}" ] ; then
+							MEMBER='{\"deviceSerialNumber\":\"'${MEMBERSERIAL}'\",\"deviceTypeId\":\"'${MEMBERTYPE}'\"},'${MEMBER}
+						else
+							MEMBER='{\"deviceSerialNumber\":\"'${MEMBERSERIAL}'\",\"deviceTypeId\":\"'${MEMBERTYPE}'\"}'
+						fi
+					done
+
+					if [ -z "${MEMBER}" ] ; then
+						echo "No clusterMembers found for command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
+						return
+					fi
+				else
+					echo "Speak to Multiroom is only possible when USE_ANNOUNCEMENT_FOR_SPEAK is set and notifications on the devices are enabled"
+					echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
+					return
+				fi
+			fi
+		fi
+
 		# the speak command is treated differently if $SPEAKVOL is > 0
 		if [ -n "${TTS}" -a $SPEAKVOL -gt 0 ] ; then
 			SVOL=$SPEAKVOL
@@ -651,7 +695,7 @@ if [ -n "${SEQUENCECMD}" ] ; then
 
 			# try to retrieve the "currently playing" volume
 			VOL=$(get_volume)
-
+			
 			if [ -z "${VOL}" ] ; then
 				# get the normal volume of the current device type
 				C=0
@@ -668,9 +712,17 @@ if [ -n "${SEQUENCECMD}" ] ; then
 				fi
 			fi
 
-			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+			if [ $USE_ANNOUNCEMENT_FOR_SPEAK -gt 0 ] ; then
+				ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"expireAfter\":\"PT5S\",\"content\":[{\"display\":{\"title\":\"AlexaRemoteControl\",\"body\":\"Announcement\"},\"speak\":{\"type\":\"ssml\",\"value\":\"'${TTS}'\"},\"locale\":\"'${TTS_LOCALE}'\"}],\"target\":{\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"devices\":['${MEMBER}']},\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}}]}}","status":"ENABLED"}';
+			else
+				ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.SerialNode\",\"nodesToExecute\":[{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${SVOL}'\"}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${TTS}'}},{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"Alexa.DeviceControls.Volume\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\",\"value\":\"'${VOL}'\"}}]}}","status":"ENABLED"}'
+			fi
 		else
-			ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
+			if [ -n "${TTS}" -a $USE_ANNOUNCEMENT_FOR_SPEAK -gt 0 ] ; then
+				ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"expireAfter\":\"PT5S\",\"content\":[{\"display\":{\"title\":\"AlexaRemoteControl\",\"body\":\"Announcement\"},\"speak\":{\"type\":\"ssml\",\"value\":\"'${TTS}'\"},\"locale\":\"'${TTS_LOCALE}'\"}],\"target\":{\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"devices\":['${MEMBER}']},\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\"}}}","status":"ENABLED"}';
+			else
+				ALEXACMD='{"behaviorId":"PREVIEW","sequenceJson":"{\"@type\":\"com.amazon.alexa.behaviors.model.Sequence\",\"startNode\":{\"@type\":\"com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode\",\"type\":\"'${SEQUENCECMD}'\",\"operationPayload\":{\"deviceType\":\"'${DEVICETYPE}'\",\"deviceSerialNumber\":\"'${DEVICESERIALNUMBER}'\",\"customerId\":\"'${MEDIAOWNERCUSTOMERID}'\",\"locale\":\"'${TTS_LOCALE}'\"'${SEQUENCEVAL}'}}}","status":"ENABLED"}'
+			fi
 		fi
 	fi
 
@@ -683,7 +735,6 @@ if [ -n "${SEQUENCECMD}" ] ; then
 	 "https://${ALEXA}/api/behaviors/preview"
 
 	rm -f "${TMP}/.alexa.cmd"
-
 else
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
@@ -870,27 +921,31 @@ get_volume()
 			if [ "$PARENTID" != "null" ] ; then
 				PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST})
 
-				VOL=$(	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+				VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 				  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 				  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-				  "https://${ALEXA}/api/np/player?deviceSerialNumber=${PARENTID}&deviceType=${PARENTDEVICE}" | jq -r '.playerInfo.lemurVolume.memberVolume | to_entries[] | "\(.key) \(.value.volume) \(.value.muted)"')
+				  "https://${ALEXA}/api/np/player?deviceSerialNumber=${PARENTID}&deviceType=${PARENTDEVICE}" | jq -r '.playerInfo.lemurVolume.memberVolume | to_entries[] | "\(.key) \(.value.volume) \(.value.muted)"' 2>/dev/null)
 			fi
 		fi
 
-		# write volume and mute state to file
-		OIFS=$IFS
-		IFS='
+		if [ -n "${VOL}" ] ; then
+			# write volume and mute state to file
+			OIFS=$IFS
+			IFS='
 '
-		set -o noglob
-		for LINE in $VOL ; do
-			SERIAL=$(echo "${LINE}" | cut -d' ' -f1)
-			VOLUME=$(echo "${LINE}" | cut -d' ' -f2)
-			MUTED=$(echo "${LINE}" | cut -d' ' -f3)
-			echo "${VOLUME} ${MUTED}" > "${TMP}/.alexa.volume.${SERIAL}"
-		done
-		IFS=$OIFS
+			set -o noglob
+			for LINE in $VOL ; do
+				SERIAL=$(echo "${LINE}" | cut -d' ' -f1)
+				VOLUME=$(echo "${LINE}" | cut -d' ' -f2)
+				MUTED=$(echo "${LINE}" | cut -d' ' -f3)
+				echo "${VOLUME} ${MUTED}" > "${TMP}/.alexa.volume.${SERIAL}"
+			done
+			IFS=$OIFS
+			cut -d' ' -f1 "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
+		fi
+	else
+		cut -d' ' -f1 "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
 	fi
-	cut -d' ' -f1 "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
 }
 
 #
