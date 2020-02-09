@@ -52,6 +52,8 @@
 # 2020-02-03: v0.15c SPEAKVOL of 0 leaves the volume setting untouched
 # 2020-02-09: v0.16 TTS to Multiroom groups via USE_ANNOUNCEMENT_FOR_SPEAK + SSML for TTS
 #               (!!! requires Announcement feature to be enabled in each device !!!)
+# 2020-02-09: v0.16a added sound library - only very few sounds are actually supported
+#               ( https://developer.amazon.com/en-US/docs/alexa/custom-skills/ask-soundlibrary.html )
 #
 ###
 #
@@ -179,7 +181,8 @@ usage()
 	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -z | -l | -h"
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
-	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,speak:'<text>',automation:'<routine name>'"
+	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
+	echo "        speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
@@ -205,7 +208,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.16"
+			echo "v0.16a"
 			exit 0
 			;;
 		-d)
@@ -412,6 +415,10 @@ case "$COMMAND" in
 				SEQUENCECMD='Alexa.Speak'
 				SEQUENCEVAL=$TTS
 			fi
+			;;
+	sound:*)
+			SEQUENCECMD='Alexa.Sound'
+			SEQUENCEVAL=',\"soundStringId\":\"'${COMMAND##sound:}'\"'
 			;;
 	automation:*)
 			SEQUENCECMD='automation'
@@ -635,7 +642,7 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
 	else
 		# SequenceCommands are generally not supported on WHA devices
-		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory" ; then
+		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|sound" ; then
 			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 				echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 				return
