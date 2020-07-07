@@ -21,9 +21,10 @@ VOLMAXAGE - max. age in minutes before volume is re-read from API
 DEVICEVOLNAME   - a list of device names with specific volume settings (space separated)
 DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
 DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
+                  (current playing volume takes precedence for normal volume)
 USE_ANNOUNCEMENT_FOR_SPEAK - Announcements can be made to multiple devices, while
-                                                       regular SPEAK cannot but the announcement feature has
-													   to be turned on for those devices. Also supports SSML!
+                             regular SPEAK cannot but the announcement feature has
+					    to be turned on for those devices. Also supports SSML!
 ```
 You will very likely want to set the language to:
 ```
