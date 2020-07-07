@@ -21,9 +21,10 @@ VOLMAXAGE - max. age in minutes before volume is re-read from API
 DEVICEVOLNAME   - a list of device names with specific volume settings (space separated)
 DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
 DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
+                  (current playing volume takes precedence for normal volume)
 USE_ANNOUNCEMENT_FOR_SPEAK - Announcements can be made to multiple devices, while
-                                                       regular SPEAK cannot but the announcement feature has
-													   to be turned on for those devices. Also supports SSML!
+                             regular SPEAK cannot but the announcement feature has
+					    to be turned on for those devices. Also supports SSML!
 ```
 You will very likely want to set the language to:
 ```
@@ -35,7 +36,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
                     -b [list|<"AA:BB:CC:DD:EE:FF">] | -q | -n | -r <"station name"|stationid> |
                     -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> |
                     -w <playlistId> | -i | -p | -P | -S | -a | -z | -l | -h |
-                    -m <multiroom_device> [device_1 .. device_X] | -lastalexa
+                    -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -lastcommand
 
    -e : run command, additional SEQUENCECMDs:
         weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
@@ -56,6 +57,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -a : list available devices
    -m : delete multiroom and/or create new multiroom containing devices
    -lastalexa : print device that received the last voice command
+   -lastcommand : print last voice command or last voice command of specific device
    -login     : Logs in, without further command (downloads cookie)
    -z : print current volume level
    -l : logoff
