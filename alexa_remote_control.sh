@@ -54,6 +54,8 @@
 #               (!!! requires Announcement feature to be enabled in each device !!!)
 # 2020-02-09: v0.16a added sound library - only very few sounds are actually supported
 #               ( https://developer.amazon.com/en-US/docs/alexa/custom-skills/ask-soundlibrary.html )
+# 2018-06-15: v0.16b added "lastcommand" option
+#               (Trinitus01)
 #
 ###
 #
@@ -170,6 +172,7 @@ CHILD=""
 PLIST=""
 BLUETOOTH=""
 LASTALEXA=""
+LASTCOMMAND=""
 GETVOL=""
 NOTIFICATIONS=""
 
@@ -178,7 +181,7 @@ usage()
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |"
 	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -n | -r <\"station name\"|stationid> |"
 	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
-	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -z | -l | -h"
+	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -lastcommand | -z | -l | -h"
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
@@ -199,6 +202,7 @@ usage()
 	echo "   -a : list available devices"
 	echo "   -m : delete multiroom and/or create new multiroom containing devices"
 	echo "   -lastalexa : print device that received the last voice command"
+	echo "   -lastcommand : print last voice command or last voice command of specific device"
 	echo "   -z : print current volume level"
 	echo "   -login : Logs in, without further command"
 	echo "   -l : logoff"
@@ -347,6 +351,9 @@ while [ "$#" -gt 0 ] ; do
 			;;
 		-lastalexa)
 			LASTALEXA="true"
+			;;
+		-lastcommand)
+			LASTCOMMAND="true"
 			;;
 		-z)
 			GETVOL="true"
@@ -1038,11 +1045,29 @@ last_alexa()
 {
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
  "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
 # Serial number: | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
 # Device name:   | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
- }
+}
+
+#
+# last command or last command of a specific device
+# (by Trinitus01)
+#
+last_command()
+{
+SERIALNUMBER=$(jq -r --arg device "$DEVICE" '.devices[] | select( .accountName == $device ) | .serialNumber' ${DEVLIST})
+ACTIVITIES=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "Mozilla/5.0" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
+ "https://${ALEXA}/api/activities?startTime=&size=10&offset=1")
+if [ -z "$DEVICE" ] ; then
+	echo "$ACTIVITIES" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .description' | jq -r .summary
+else
+	echo "$ACTIVITIES" | jq -r --arg serialnumber "$SERIALNUMBER" '[.activities[] | select( .activityStatus == "SUCCESS" ) | select( .sourceDeviceIds[].serialNumber == $serialnumber)][0] | .description' | jq -r .summary
+fi
+}
 
 #
 # logout
@@ -1058,7 +1083,7 @@ rm -f ${TMP}/.alexa.*.list
 rm -f ${TMP}/.alexa.volume.*
 }
 
-if [ -z "$LASTALEXA" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -z "$GETVOL" -a -n "$LOGOFF" ] ; then
+if [ -z "$LASTALEXA" -a -z "$LASTCOMMAND" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -z "$GETVOL" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
@@ -1216,6 +1241,8 @@ elif [ -n "$HIST" ] ; then
 	play_prime_hist_queue
 elif [ -n "$LASTALEXA" ] ; then
 	last_alexa
+elif [ -n "$LASTCOMMAND" ] ; then
+	last_command
 else
 	echo "no alexa command received"
 fi
