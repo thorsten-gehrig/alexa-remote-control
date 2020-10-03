@@ -78,3 +78,11 @@ In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
 It is assumed that MFA secured accounts are less likely to get a captcha response during login - that's why MFA might yield better results if the plain username/password didn't work for you.
 
 http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
+
+## Requirements
+
+ * Bourne shell - `/bin/sh` - what these scripts are written in
+ * Curl - `/usr/bin/curl` - required to interact with Amazon web services
+ * oathtool - `/usr/bin/oathtool` - only required if using MFA/2FA
+ * jq - `jq` - **not** needed for `alexa_remote_control_plain.sh` version, see https://stedolan.github.io/jq/
+
