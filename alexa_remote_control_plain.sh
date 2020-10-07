@@ -322,6 +322,10 @@ case "$COMMAND" in
 			fi
 			;;
 	speak:*)
+			if [ $USE_ANNOUNCEMENT_FOR_SPEAK -gt 0 ] ; then
+				echo "ERROR: USE_ANNOUNCEMENT_FOR_SPEAK not supported in plain shell version. Requires jq"
+				exit 1
+			fi
 			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
 			TTS=',\"textToSpeak\":\"'${TTS}'\"'
 			SEQUENCECMD='Alexa.Speak'
