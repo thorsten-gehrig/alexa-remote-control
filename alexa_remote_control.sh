@@ -59,6 +59,8 @@
 # 2020-07-07: v0.16c fixed NORMALVOL if USE_ANNOUNCEMENT_FOR_SPEAK is set
 # 2020-12-12: v0.17 added textcommand which lets you send anything via CLI you would otherwise say to Alexa
 #               ( https://github.com/thorsten-gehrig/alexa-remote-control/issues/108 )
+# 2020-12-12: v0.17a sounds now benefit from SPEAKVOL
+#                    fixed TuneIn IDs to also play podcasts
 #
 ###
 #
@@ -216,7 +218,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.17"
+			echo "v0.17a"
 			exit 0
 			;;
 		-d)
@@ -266,8 +268,8 @@ while [ "$#" -gt 0 ] ; do
 			fi
 			STATIONID=$2
 			shift
-			# stationIDs are "s1234" or "s12345"
-			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9]}" -a -n "${STATIONID##s[0-9][0-9][0-9][0-9][0-9][0-9]}" ] ; then
+			# stationIDs are "s1234" or "s12345" 
+			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]*}" -a -n "${STATIONID##p[0-9][0-9][0-9][0-9]*}" ] ; then
 				# search for station name
 				STATIONID=$(${CURL} ${OPTS} -s --data-urlencode "query=${STATIONID}" -G "https://api.tunein.com/profiles?fullTextSearch=true" | jq -r '.Items[] | select(.ContainerType == "Stations") | .Children[] | select( .Index==1 ) | .GuideId')
 				if [ -z "$STATIONID" ] ; then
