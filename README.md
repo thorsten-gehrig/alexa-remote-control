@@ -24,7 +24,7 @@ DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
                   (current playing volume takes precedence for normal volume)
 USE_ANNOUNCEMENT_FOR_SPEAK - Announcements can be made to multiple devices, while
                              regular SPEAK cannot but the announcement feature has
-					    to be turned on for those devices. Also supports SSML!
+                             to be turned on for those devices. Also supports SSML!
 ```
 You will very likely want to set the language to:
 ```
@@ -40,7 +40,9 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
 
    -e : run command, additional SEQUENCECMDs:
         weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
-        speak:'<text/ssml>',automation:'<routine name>,sound:<soundeffect_name>'
+        speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>,
+        textcommand:'<anything you would otherwise say to Alexa>'
+
    -b : connect/disconnect/list bluetooth device
    -q : query queue
    -n : query notifications
@@ -63,7 +65,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -l : logoff
    -h : help
 ```
- 
+
 There's also a "plain" version, which lacks some functionality (-z, -i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
 In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:

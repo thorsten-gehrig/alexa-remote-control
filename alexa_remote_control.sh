@@ -57,6 +57,8 @@
 # 2020-06-15: v0.16b added "lastcommand" option
 #               (thanks to Trinitus01 https://github.com/trinitus01)
 # 2020-07-07: v0.16c fixed NORMALVOL if USE_ANNOUNCEMENT_FOR_SPEAK is set
+# 2020-12-12: v0.17 added textcommand which lets you send anything via CLI you would otherwise say to Alexa
+#               ( https://github.com/thorsten-gehrig/alexa-remote-control/issues/108 )
 #
 ###
 #
@@ -186,7 +188,8 @@ usage()
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
-	echo "        speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>"
+	echo "        speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>,"
+	echo "        textcommand:'<anything you would otherwise say to Alexa>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
@@ -213,7 +216,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.16a"
+			echo "v0.17"
 			exit 0
 			;;
 		-d)
@@ -409,6 +412,11 @@ case "$COMMAND" in
 				usage
 				exit 1
 			fi
+			;;
+	textcommand:*)
+			SEQUENCECMD='Alexa.TextCommand\",\"skillId\":\"amzn1.ask.1p.tellalexa'
+			SEQUENCEVAL=$(echo ${COMMAND##textcommand:} | sed -r s/\"/\'/g)
+			SEQUENCEVAL=',\"text\":\"'${SEQUENCEVAL}'\"'
 			;;
 	speak:*)
 			TTS=$(echo ${COMMAND##speak:} | sed -r s/\"/\'/g)
@@ -650,7 +658,7 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
 	else
 		# SequenceCommands are generally not supported on WHA devices
-		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|sound" ; then
+		if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|sound|textcommand" ; then
 			if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 				echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 				return

@@ -3,7 +3,7 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2020-07-07: v0.16c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2020-12-12: v0.17 (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
 #
 ###
 #
@@ -57,7 +57,7 @@ SET_SPEAKVOL="0"
 SET_NORMALVOL="10"
 
 # Device specific volumes (overriding the above)
-SET_DEVICEVOLNAME="EchoDot2ndGen  Echo1stGen"
+SET_DEVICEVOLNAME="EchoDot2ndGen Echo1stGen"
 SET_DEVICEVOLSPEAK="100 30"
 SET_DEVICEVOLNORMAL="100 20"
 
@@ -121,7 +121,8 @@ usage()
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
-	echo "        speak:'<text>'sound:<soundeffect_name>"
+	echo "        speak:'<text>',sound:<soundeffect_name>,"
+	echo "        textcommand:'<anything you would otherwise say to Alexa>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
@@ -142,7 +143,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.16a"
+			echo "v0.17"
 			exit 0
 			;;
 		-d)
@@ -320,6 +321,11 @@ case "$COMMAND" in
 				usage
 				exit 1
 			fi
+			;;
+	textcommand:*)
+			SEQUENCECMD='Alexa.TextCommand\",\"skillId\":\"amzn1.ask.1p.tellalexa'
+			SEQUENCEVAL=$(echo ${COMMAND##textcommand:} | sed -r s/\"/\'/g)
+			SEQUENCEVAL=',\"text\":\"'${SEQUENCEVAL}'\"'
 			;;
 	speak:*)
 			TTS=$(echo ${COMMAND##*:} | sed -r 's/["\\]/ /g')
@@ -625,7 +631,7 @@ set_var()
 run_cmd()
 {
 if [ -n "${SEQUENCECMD}" ] ; then
-	if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak|sound" ; then
+	if echo $COMMAND | grep -q -E "weather|traffic|flashbriefing|goodmorning|singasong|tellstory|speak|sound|textcommand" ; then
 		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 			echo "Skipping unsupported command: ${COMMAND} on dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} family:${DEVICEFAMILY}"
 			return
