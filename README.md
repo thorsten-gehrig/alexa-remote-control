@@ -41,7 +41,7 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -e : run command, additional SEQUENCECMDs:
         weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
         speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>,
-        textcommand:'<anything you would say to Alexa otherwise>'
+        textcommand:'<anything you would otherwise say to Alexa>'
 
    -b : connect/disconnect/list bluetooth device
    -q : query queue
