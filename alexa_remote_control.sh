@@ -63,6 +63,8 @@
 #                    fixed TuneIn IDs to also play podcasts
 # 2021-01-28: v0.17b fixed new API endpoint for automations
 #               (thanks to Michael Winkler)
+# 2021-01-28: v0.17c simplified volume detection using new DeviceVolumes endpoint
+#               (thanks to Ingo Fischer)
 #
 ###
 #
@@ -117,7 +119,7 @@ SET_SPEAKVOL="0"
 SET_NORMALVOL="10"
 
 # max. age in minutes before volume is read from API
-SET_VOLMAXAGE="30"
+SET_VOLMAXAGE="1"
 
 # Device specific volumes (overriding the above)
 SET_DEVICEVOLNAME="EchoDot2ndGen Echo1stGen"
@@ -220,7 +222,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.17b"
+			echo "v0.17c"
 			exit 0
 			;;
 		-d)
@@ -935,25 +937,10 @@ get_volume()
 {
 	VOLFILE=$(find "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}" -mmin -${VOLMAXAGE} 2>/dev/null)
 	if [ -z "${VOLFILE}" ] ; then
-		# first, try the volume setting of /media/state of the device
 		VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
-			-H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-			-H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-			"https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq -r  --arg device "${DEVICESERIALNUMBER}" '"\($device) \(.volume) \(.muted)"')
-
-		VOLCHECK=$(echo "${VOL}" | cut -d' ' -f2)
-		# if we didn't get a proper volume, try the LemurDevice
-		if [ "$VOLCHECK" = "0" -o "$VOLCHECK" = "null" -o -z "$VOLCHECK" ] ; then
-			PARENTID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST})
-			if [ "$PARENTID" != "null" ] ; then
-				PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST})
-
-				VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
-				  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
-				  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-				  "https://${ALEXA}/api/np/player?deviceSerialNumber=${PARENTID}&deviceType=${PARENTDEVICE}" | jq -r '.playerInfo.lemurVolume.memberVolume | to_entries[] | "\(.key) \(.value.volume) \(.value.muted)"' 2>/dev/null)
-			fi
-		fi
+				-H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+				-H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+				"https://${ALEXA}/api/devices/deviceType/dsn/audio/v1/allDeviceVolumes" | jq -r  --arg device "${DEVICESERIALNUMBER}" '.volumes[] | "\(.dsn) \(.speakerVolume) \(.speakerMuted)"')
 
 		if [ -n "${VOL}" ] ; then
 			# write volume and mute state to file
