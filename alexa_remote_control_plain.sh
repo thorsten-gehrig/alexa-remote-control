@@ -3,7 +3,12 @@
 # Amazon Alexa Remote Control (PLAIN shell)
 #  alex(at)loetzimmer.de
 #
-# 2020-12-12: v0.17a (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2021-01-28: v0.17c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+#
+# !!! THIS IS THE FINAL VERSION !!!
+#
+#  Due to JQ being widely available across platforms there is no need to expose oneself to the hacks
+#  required when parsing JSON with BASH.
 #
 ###
 #
