@@ -252,8 +252,8 @@ while [ "$#" -gt 0 ] ; do
 			fi
 			;;
 		-m)
-			if [ "${2#-}" != "${2}" -o -z "$2" ] ; then
-				echo "ERROR: missing argument for ${1}"
+			if [ "${2#-}" != "${2}" -o -z "$2" -o "$(echo "${2}" | tr [:upper:] [:lower:])" = "all" ] ; then
+				echo "ERROR: missing or invalid argument for ${1}"
 				usage
 				exit 1
 			fi
