@@ -74,8 +74,8 @@ In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
 1. When presented with the QR-code select "can't scan code"
 1. You will be presented with the MFA shared secret, something like `1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG`
 1. Now you have to generate a valid response code via `oathtool -b --totp "<MFA shared secret from above>"` and enter that in the web form
-1. Going from here the MFA shared secret becomes the MFA_SECRET for the alexa_remote_control script
-*Treat that MFA_SCECRET just like your password - DO NOT share it anywhere!!!*
+1. Going from here the MFA shared secret becomes the MFA_SECRET for the alexa_remote_control script;
+*Treat that MFA_SECRET just like your password - DO NOT share it anywhere!!!*
 
 It is assumed that MFA secured accounts are less likely to get a captcha response during login - that's why MFA might yield better results if the plain username/password didn't work for you.
 
