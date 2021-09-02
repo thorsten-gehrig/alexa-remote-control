@@ -67,6 +67,9 @@
 #               (thanks to Ingo Fischer)
 # 2021-05-27: v0.18 complete rework of sequence commands especially for TTS
 #                    Announcement feature is no longer required due to inconsistent SSML handling
+# 2021-09-02: v0.19 Playing TuneIn works again using new entertainment API endpoint
+#               Added playmusic (Alexa.Music.PlaySearchPhrase) as command, for available channels use "-c"
+#               Note: playmusic is not multi-room capable, doing so might lead to unexpected results
 #
 ###
 #
@@ -74,6 +77,7 @@
 # - requires cURL for web communication
 # - (GNU) sed and awk for extraction
 # - jq as command line JSON parser (optional for the fancy bits)
+# - base64 for B64 encoding (make sure "-w 0" option is available on your platform)
 # - oathtool as OATH one-time password tool (optional for two-factor authentication)
 #
 ##########################################
@@ -167,7 +171,10 @@ TTS=""
 UTTERANCE=""
 SEQUENCECMD=""
 SEQUENCEVAL=""
+SEARCHPHRASE=""
+PROVIDERID=""
 STATIONID=""
+CHANNEL=""
 QUEUE=""
 SONG=""
 ALBUM=""
@@ -188,15 +195,17 @@ NOTIFICATIONS=""
 usage()
 {
 	echo "$0 [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|repeat|vol:<0-100>> |"
-	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -n | -r <\"station name\"|stationid> |"
+	echo "          -b [list|<\"AA:BB:CC:DD:EE:FF\">] | -q | -n | -r <\"station name\"|stationId> |"
 	echo "          -s <trackID|'Artist' 'Album'> | -t <ASIN> | -u <seedID> | -v <queueID> | -w <playlistId> |"
 	echo "          -i | -p | -P | -S | -a | -m <multiroom_device> [device_1 .. device_X] | -lastalexa | -lastcommand | -z | -l | -h"
 	echo
 	echo "   -e : run command, additional SEQUENCECMDs:"
 	echo "        weather,traffic,flashbriefing,goodmorning,singasong,tellstory,"
 	echo "        speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>,"
-	echo "        textcommand:'<anything you would otherwise say to Alexa>'"
+	echo "        textcommand:'<anything you would otherwise say to Alexa>',"
+	echo "        playmusic:<channel e.g. TUNEIN, AMAZON_MUSIC>:'<music name>'"
 	echo "   -b : connect/disconnect/list bluetooth device"
+	echo "   -c : list 'playmusic' channels"
 	echo "   -q : query queue"
 	echo "   -n : query notifications"
 	echo "   -r : play tunein radio"
@@ -222,7 +231,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.18"
+			echo "v0.19"
 			exit 0
 			;;
 		-d)
@@ -341,6 +350,9 @@ while [ "$#" -gt 0 ] ; do
 		-a)
 			LIST="true"
 			;;
+	    -c)
+			CHANNEL="true"
+			;;
 		-i)
 			TYPE="IMPORTED"
 			;;
@@ -454,6 +466,13 @@ case "$COMMAND" in
 			;;
 	tellstory)
 			SEQUENCECMD='Alexa.TellStory.Play'
+			;;
+	playmusic:*)
+			SEQUENCECMD='Alexa.Music.PlaySearchPhrase'
+			PROVIDERID=${COMMAND#*:}
+			PROVIDERID=${PROVIDERID%:*}
+			SEQUENCEVAL=',\"musicProviderId\":\"'${PROVIDERID}'\",'
+			SEARCHPHRASE=$(echo ${COMMAND##*:} | sed s/\"/\'/g)
 			;;
 	"")
 			;;
@@ -627,6 +646,26 @@ list_devices()
 }
 
 #
+# sanitize search phrase
+#  ARG1 - sequence command (e.g. Alexa.Music.PlaySearchPhrase)
+#  ARG2 - musicProviderID ( TUNEIN, AMASON_MUSIC, CLOUDPLAYER, SPOTIFY, APPLE_MUSIC, DEEZER, I_HEART_RADIO )
+#  ARG3 - search phrase
+#
+sanitize_search()
+{
+	if [ -n "$1" -a -n "$2" -a -n "$3" ] ; then
+		JSON='{"type":"'${1}'","operationPayload":"{\"locale\":\"'${TTS_LOCALE}'\",\"musicProviderId\":\"'${2}'\",\"searchPhrase\":\"'${3}'\"}"}'
+	else
+		JSON='{"type":"'${SEQUENCECMD}'","operationPayload":"{\"locale\":\"'${TTS_LOCALE}'\",\"musicProviderId\":\"'${PROVIDERID}'\",\"searchPhrase\":\"'${SEARCHPHRASE}'\"}"}'
+	fi
+
+	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d "${JSON}" \
+	 "https://${ALEXA}/api/behaviors/operation/validate" | jq -r '.operationPayload.sanitizedSearchPhrase'
+}
+
+#
 # build node_to_execute string
 #  ARG1 - SEQUENCECMD
 #  ARG2 - SEQUENCEVAL
@@ -684,6 +723,14 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		VOLUMEPRENODESTOEXECUTE=''
 		VOLUMEPOSTNODESTOEXECUTE=''
 		NODESTOEXECUTE=''
+
+		# sanitize search phrase
+		if [ -n "${SEARCHPHRASE}" -a -n "${PROVIDERID}" ] ; then
+			SEQUENCEVAL=${SEQUENCEVAL}'\"searchPhrase\":\"'${SEARCHPHRASE}'\",\"sanitizedSearchPhrase\":\"'$(sanitize_search)'\"'
+		fi
+
+		# iterate over member devices if target is multiroom
+		# !!! this is no true multi-room - it just tries to play on every member device in parallel !!!
 		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
 			MEMBERDEVICESERIALS=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .clusterMembers[]' ${DEVLIST})
 			for DEVICESERIALNUMBER in $MEMBERDEVICESERIALS ; do
@@ -691,7 +738,8 @@ if [ -n "${SEQUENCECMD}" ] ; then
 				NODESTOEXECUTE=$(add_node "$(node)" "${NODESTOEXECUTE}")
 
 				# add volume setting per device - the WHA volume is unrelyable
-				if [ $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" ] ; then
+				# don't set volume if Alexa.Music.PlaySearchPhrase is used
+				if [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
 					DEVICE=$(jq --arg device "${DEVICESERIALNUMBER}" -r '.devices[] | select(.serialNumber == $device) | .accountName' ${DEVLIST})
 					get_volumes
 					VOLUMEPRENODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${SVOL}'\"') ${VOLUMEPRENODESTOEXECUTE})
@@ -705,7 +753,9 @@ if [ -n "${SEQUENCECMD}" ] ; then
 			fi
 		else
 			NODESTOEXECUTE=$(add_node "$(node)" "${NODESTOEXECUTE}")
-			if [ $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" ] ; then
+
+			# don't set volume if Alexa.Music.PlaySearchPhrase is used
+			if [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
 				get_volumes
 				VOLUMEPRENODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${SVOL}'\"') ${VOLUMEPRENODESTOEXECUTE})
 				VOLUMEPOSTNODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${VOL}'\"') ${VOLUMEPOSTNODESTOEXECUTE})
@@ -730,7 +780,7 @@ if [ -n "${SEQUENCECMD}" ] ; then
 	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d @"${TMP}/.alexa.cmd" \
 	 "https://${ALEXA}/api/behaviors/preview"
 
-#	rm -f "${TMP}/.alexa.cmd"
+	rm -f "${TMP}/.alexa.cmd"
 else
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
@@ -744,10 +794,12 @@ fi
 #
 play_radio()
 {
-${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ JSON='{"contentToken":"music:'$(echo '["music/tuneIn/stationId","'${STATIONID}'"]|{"previousPageId":"TuneIn_SEARCH"}'| base64 -w 0| base64 -w 0 )'"}'
+
+ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST\
- "https://${ALEXA}/api/tunein/queue-and-play?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&guideId=${STATIONID}&contentType=station&callSign=&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}"
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X PUT -d "${JSON}" \
+ "https://${ALEXA}/api/entertainment/v1/player/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
 }
 
 #
@@ -895,6 +947,14 @@ show_queue()
   -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
   -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
   "https://${ALEXA}/api/np/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq '.'
+}
+
+get_music_channels()
+{
+   ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+    -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+    -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
+    "https://${ALEXA}/api/behaviors/entities?skillId=amzn1.ask.1p.music" | jq -r '.[] | select( .supportedProperties[] == "Alexa.Music.PlaySearchPhrase" ) |  "\(.id) - \(.displayName) \(.description)"'
 }
 
 #
@@ -1103,7 +1163,7 @@ rm -f ${TMP}/.alexa.*.list
 rm -f ${TMP}/.alexa.volume.*
 }
 
-if [ -z "$LASTALEXA" -a -z "$LASTCOMMAND" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -z "$GETVOL" -a -n "$LOGOFF" ] ; then
+if [ -z "$LASTALEXA" -a -z "$LASTCOMMAND" -a -z "$CHANNEL" -a -z "$BLUETOOTH" -a -z "$LEMUR" -a -z "$PLIST" -a -z "$HIST" -a -z "$SEEDID" -a -z "$ASIN" -a -z "$PRIME" -a -z "$TYPE" -a -z "$QUEUE" -a -z "$NOTIFICATIONS" -a -z "$LIST" -a -z "$COMMAND" -a -z "$STATIONID" -a -z "$SONG" -a -z "$GETVOL" -a -n "$LOGOFF" ] ; then
 	echo "only logout option present, logging off ..."
 	log_off
 	exit 0
@@ -1136,6 +1196,11 @@ fi
 
 if [ -n "$LOGIN" ] ; then
 	echo "logged in"
+	exit 0
+fi
+
+if [ -n "$CHANNEL" ] ; then
+	get_music_channels
 	exit 0
 fi
 

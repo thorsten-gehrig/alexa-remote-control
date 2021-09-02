@@ -4,6 +4,7 @@
 #  alex(at)loetzimmer.de
 #
 # 2021-01-28: v0.17c (for updates see http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html)
+# 2021-09-02: v0.17d includes fixes for playing tunein (base64 required)
 #
 # !!! THIS IS THE FINAL VERSION !!!
 #
@@ -15,6 +16,7 @@
 # (no BASHisms were used, should run with any shell)
 # - requires cURL for web communication
 # - (GNU) sed and awk for extraction
+# - base64 for B64 encoding (make sure "-w 0" option is available on your platform)
 # - oathtool as OATH one-time password tool (optional for two-factor authentication)
 #
 ##########################################
@@ -148,7 +150,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.17a"
+			echo "v0.17d"
 			exit 0
 			;;
 		-d)
@@ -719,10 +721,12 @@ fi
 #
 play_radio()
 {
-${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+ JSON='{"contentToken":"music:'$(echo '["music/tuneIn/stationId","'${STATIONID}'"]|{"previousPageId":"TuneIn_SEARCH"}'| base64 -w 0| base64 -w 0 )'"}'
+
+ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST\
- "https://${ALEXA}/api/tunein/queue-and-play?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&guideId=${STATIONID}&contentType=station&callSign=&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}"
+ -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X PUT -d "${JSON}" \
+ "https://${ALEXA}/api/entertainment/v1/player/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}"
 }
 
 #
