@@ -22,9 +22,7 @@ DEVICEVOLNAME   - a list of device names with specific volume settings (space se
 DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
 DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
                   (current playing volume takes precedence for normal volume)
-USE_ANNOUNCEMENT_FOR_SPEAK - Announcements can be made to multiple devices, while
-                             regular SPEAK cannot but the announcement feature has
-                             to be turned on for those devices. Also supports SSML!
+
 ```
 You will very likely want to set the language to:
 ```
@@ -41,9 +39,11 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
    -e : run command, additional SEQUENCECMDs:
         weather,traffic,flashbriefing,goodmorning,singasong,tellstory,
         speak:'<text/ssml>',automation:'<routine name>',sound:<soundeffect_name>,
-        textcommand:'<anything you would otherwise say to Alexa>'
+        textcommand:'<anything you would otherwise say to Alexa>',
+        playmusic:<channel e.g. TUNEIN, AMAZON_MUSIC>:'<music name>'
 
    -b : connect/disconnect/list bluetooth device
+   -c : list 'playmusic' channels
    -q : query queue
    -n : query notifications
    -r : play tunein radio
