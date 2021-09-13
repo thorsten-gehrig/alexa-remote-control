@@ -70,6 +70,8 @@
 # 2021-09-02: v0.19 Playing TuneIn works again using new entertainment API endpoint
 #               Added playmusic (Alexa.Music.PlaySearchPhrase) as command, for available channels use "-c"
 #               Note: playmusic is not multi-room capable, doing so might lead to unexpected results
+# 2021-09-13: v0.20 implemented device registration refresh_token cookie exchange flow as an alternative
+#               to logging in 
 #
 ###
 #
@@ -87,6 +89,10 @@ SET_PASSWORD='Very_Secret_Amazon_Account_Password'
 SET_MFA_SECRET=''
 # something like:
 #  1234 5678 9ABC DEFG HIJK LMNO PQRS TUVW XYZ0 1234 5678 9ABC DEFG
+
+# this can be obtained by doing the device registration login flow
+#  e.g. from here: https://github.com/Apollon77/alexa-cookie/
+SET_REFRESH_TOKEN=''
 
 SET_LANGUAGE='de,en-US;q=0.7,en;q=0.3'
 #SET_LANGUAGE='en-US'
@@ -143,6 +149,7 @@ SET_VOLMAXAGE="1"
 EMAIL=${EMAIL:-$SET_EMAIL}
 PASSWORD=${PASSWORD:-$SET_PASSWORD}
 MFA_SECRET=${MFA_SECRET:-$SET_MFA_SECRET}
+REFRESH_TOKEN=${REFRESH_TOKEN:-$SET_REFRESH_TOKEN}
 AMAZON=${AMAZON:-$SET_AMAZON}
 ALEXA=${ALEXA:-$SET_ALEXA}
 LANGUAGE=${LANGUAGE:-$SET_LANGUAGE}
@@ -231,7 +238,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.19"
+			echo "v0.20"
 			exit 0
 			;;
 		-d)
@@ -500,52 +507,67 @@ rm -f ${DEVLIST}
 rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 
-#
-# get first cookie and write redirection target into referer
-#
-${CURL} ${OPTS} -s -D "${TMP}/.alexa.header" -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
- https://alexa.${AMAZON} | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata"
+if [ -z "${REFRESH_TOKEN}" ] ; then
+	#
+	# get first cookie and write redirection target into referer
+	#
+	${CURL} ${OPTS} -s -D "${TMP}/.alexa.header" -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
+	 https://alexa.${AMAZON} | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata"
 
-#
-# login empty to generate session
-#
-${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
- -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
+	#
+	# login empty to generate session
+	#
+	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
+	 -H "$(grep 'Location: ' ${TMP}/.alexa.header | sed 's/Location: /Referer: /')" -d "@${TMP}/.alexa.postdata" https://www.${AMAZON}/ap/signin | grep "hidden" | sed 's/hidden/\n/g' | grep "value=\"" | sed -r 's/^.*name="([^"]+)".*value="([^"]+)".*/\1=\2\&/g' > "${TMP}/.alexa.postdata2"
 
-#
-# add OTP if using MFA
-#
-if [ -n "${MFA_SECRET}" ] ; then
-	OTP=$(${OATHTOOL} -b --totp "${MFA_SECRET}")
-	PASSWORD="${PASSWORD}${OTP}"
-fi
+	#
+	# add OTP if using MFA
+	#
+	if [ -n "${MFA_SECRET}" ] ; then
+		OTP=$(${OATHTOOL} -b --totp "${MFA_SECRET}")
+		PASSWORD="${PASSWORD}${OTP}"
+	fi
 
-#
-# login with filled out form
-#  !!! referer now contains session in URL
-#
-${CURL} ${OPTS} -s -D "${TMP}/.alexa.header2" -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
- -H "Referer: https://www.${AMAZON}/ap/signin/$(awk "\$0 ~/.${AMAZON}.*session-id[ \\s\\t]+/ {print \$7}" ${COOKIE})" --data-urlencode "email=${EMAIL}" --data-urlencode "password=${PASSWORD}" -d "@${TMP}/.alexa.postdata2" https://www.${AMAZON}/ap/signin > "${TMP}/.alexa.login"
+	#
+	# login with filled out form
+	#  !!! referer now contains session in URL
+	#
+	${CURL} ${OPTS} -s -D "${TMP}/.alexa.header2" -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "Accept-Language: ${LANGUAGE}" -H "DNT: 1" -H "Connection: keep-alive" -H "Upgrade-Insecure-Requests: 1" -L\
+	 -H "Referer: https://www.${AMAZON}/ap/signin/$(awk "\$0 ~/.${AMAZON}.*session-id[ \\s\\t]+/ {print \$7}" ${COOKIE})" --data-urlencode "email=${EMAIL}" --data-urlencode "password=${PASSWORD}" -d "@${TMP}/.alexa.postdata2" https://www.${AMAZON}/ap/signin > "${TMP}/.alexa.login"
 
-# check whether the login has been successful or exit otherwise
-if [ -z "$(grep 'Location: https://alexa.*html' ${TMP}/.alexa.header2)" ] ; then
-	echo "ERROR: Amazon Login was unsuccessful. Possibly you get a captcha login screen."
-	echo " Try logging in to https://alexa.${AMAZON} with your browser. In your browser"
-	echo " make sure to have all Amazon related cookies deleted and Javascript disabled!"
-	echo
-	echo " (For more information have a look at ${TMP}/.alexa.login)"
-	echo
-	echo " To avoid issues with captcha, try using Multi-Factor Authentication."
-	echo " To do so, first set up Two-Step Verification on your Amazon account, then"
-	echo " configure this script (or the environment) with your MFA secret."
-	echo " Support for Multi-Factor Authentication requires 'oathtool' to be installed."
+	# check whether the login has been successful or exit otherwise
+	if [ -z "$(grep 'Location: https://alexa.*html' ${TMP}/.alexa.header2)" ] ; then
+		echo "ERROR: Amazon Login was unsuccessful. Possibly you get a captcha login screen."
+		echo " Try logging in to https://alexa.${AMAZON} with your browser. In your browser"
+		echo " make sure to have all Amazon related cookies deleted and Javascript disabled!"
+		echo
+		echo " (For more information have a look at ${TMP}/.alexa.login)"
+		echo
+		echo " To avoid issues with captcha, try using Multi-Factor Authentication."
+		echo " To do so, first set up Two-Step Verification on your Amazon account, then"
+		echo " configure this script (or the environment) with your MFA secret."
+		echo " Support for Multi-Factor Authentication requires 'oathtool' to be installed."
 
-	rm -f ${COOKIE}
+		rm -f ${COOKIE}
+		rm -f "${TMP}/.alexa.header"
+		rm -f "${TMP}/.alexa.header2"
+		rm -f "${TMP}/.alexa.postdata"
+		rm -f "${TMP}/.alexa.postdata2"
+		exit 1
+	fi
+
+	rm -f "${TMP}/.alexa.login"
 	rm -f "${TMP}/.alexa.header"
 	rm -f "${TMP}/.alexa.header2"
 	rm -f "${TMP}/.alexa.postdata"
 	rm -f "${TMP}/.alexa.postdata2"
-	exit 1
+else
+	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" 	-H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime | strftime("%s") ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+
+	if [ -z "$(grep ".${AMAZON}.*at-acbde" ${COOKIE})" ] ; then
+		echo "ERROR: cookie retrieval with refresh_token didn't work"
+		exit 1
+	fi
 fi
 
 #
@@ -568,12 +590,6 @@ if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/api/devices-v2/device?cached=false > /dev/null
 fi
-
-rm -f "${TMP}/.alexa.login"
-rm -f "${TMP}/.alexa.header"
-rm -f "${TMP}/.alexa.header2"
-rm -f "${TMP}/.alexa.postdata"
-rm -f "${TMP}/.alexa.postdata2"
 
 if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
 	echo "ERROR: no CSRF cookie received"
