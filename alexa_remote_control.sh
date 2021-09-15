@@ -71,7 +71,8 @@
 #               Added playmusic (Alexa.Music.PlaySearchPhrase) as command, for available channels use "-c"
 #               Note: playmusic is not multi-room capable, doing so might lead to unexpected results
 # 2021-09-13: v0.20 implemented device registration refresh_token cookie exchange flow as an alternative
-#               to logging in 
+#               to logging in
+# 2021-09-15: v0.20a optimized speak commands to use less JQ. This is useful in low-resource environments
 #
 ###
 #
@@ -167,7 +168,7 @@ DEVICEVOLSPEAK=${DEVICEVOLSPEAK:-$SET_DEVICEVOLSPEAK}
 DEVICEVOLNORMAL=${DEVICEVOLNORMAL:-$SET_DEVICEVOLNORMAL}
 
 COOKIE="${TMP}/.alexa.cookie"
-DEVLIST="${TMP}/.alexa.devicelist.json"
+DEVLIST="${TMP}/.alexa.devicelist"
 
 GUIVERSION=0
 
@@ -238,7 +239,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.20"
+			echo "v0.20a"
 			exit 0
 			;;
 		-d)
@@ -503,7 +504,7 @@ log_in()
 #
 ################################################################
 
-rm -f ${DEVLIST}
+rm -f ${DEVLIST}.json
 rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 
@@ -562,19 +563,18 @@ if [ -z "${REFRESH_TOKEN}" ] ; then
 	rm -f "${TMP}/.alexa.postdata"
 	rm -f "${TMP}/.alexa.postdata2"
 else
-	# ${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" 	-H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+#	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
 	# work around for cookies valid beyond 2038-01-19 on 32bit systems
-    ${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies > ${COOKIE}.json
-	# replace expiration dates > 2037 before piping to JQ
-    sed -e "$(cat ${COOKIE}.json | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
-     jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies > ${COOKIE}.json
+	sed -e "$(cat ${COOKIE}.json | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
+	 jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
 	if [ -z "$(grep ".${AMAZON}.*at-acbde" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
 		exit 1
 	fi
-	rm -f ${COOKIE}.json
+	rm -rf ${COOKIE}.json
 fi
 
 #
@@ -609,10 +609,13 @@ fi
 #
 get_devlist()
 {
-${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
- -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
- -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})"\
- "https://${ALEXA}/api/devices-v2/device?cached=false" > ${DEVLIST}
+	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
+	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
+	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})"\
+	 "https://${ALEXA}/api/devices-v2/device?cached=false" > ${DEVLIST}.json
+
+	jq -r '.devices[] | "\(.accountName)=\(.deviceType)=\(.serialNumber)=\(.deviceFamily)"' ${DEVLIST}.json > ${DEVLIST}.txt
+	jq -r '.devices[] | select(.deviceFamily == "WHA") | "\(.accountName)=\(.clusterMembers[])"' ${DEVLIST}.json > ${DEVLIST}_wha.txt
 }
 
 check_status()
@@ -641,18 +644,21 @@ set_var()
 
 	if [ -z "${DEVICE}" ] ; then
 		# if no device was supplied, use the first Echo(dot) in device list
-		echo "setting default device to:"
-		DEVICE=$(jq -r '[ .devices[] | select(.deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" ) | .accountName] | .[0]' ${DEVLIST})
+		echo -n "setting default device to: "
+		DEVICE=$(grep -m 1 -E "ECHO|KNIGHT|ROOK" ${DEVLIST}.txt | cut -d'=' -f1)
 		echo ${DEVICE}
 	fi
 
-	DEVICETYPE=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceType' ${DEVLIST})
-	DEVICESERIALNUMBER=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .serialNumber' ${DEVLIST})
-	DEVICEFAMILY=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceFamily' ${DEVLIST})
+	DEVICESERIALNUMBER=$(grep -m 1 "${DEVICE}" ${DEVLIST}.txt)
+	DEVICESERIALNUMBER=${DEVICESERIALNUMBER#*=}
 
+	DEVICEFAMILY=${DEVICESERIALNUMBER##*=}
+	DEVICETYPE=${DEVICESERIALNUMBER%%=*}
+	DEVICESERIALNUMBER=${DEVICESERIALNUMBER#*=}
+	DEVICESERIALNUMBER=${DEVICESERIALNUMBER%=*}
 	# customerId is now retrieved from the logged in user
 	# the customerId in the device list is always from the user registering the device initially
-	# MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST})
+	# MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST}.json)
 
 	if [ -z "${DEVICESERIALNUMBER}" ] ; then
 		echo "ERROR: unkown device dev:${DEVICE}"
@@ -665,7 +671,7 @@ set_var()
 #
 list_devices()
 {
-	jq -r '.devices[].accountName' ${DEVLIST}
+	jq -r '.devices[].accountName' ${DEVLIST}.json
 }
 
 #
@@ -755,15 +761,15 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		# iterate over member devices if target is multiroom
 		# !!! this is no true multi-room - it just tries to play on every member device in parallel !!!
 		if [ "${DEVICEFAMILY}" = "WHA" ] ; then
-			MEMBERDEVICESERIALS=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .clusterMembers[]' ${DEVLIST})
+			MEMBERDEVICESERIALS=$(grep "${DEVICE}" ${DEVLIST}_wha.txt | cut -d'=' -f 2)
 			for DEVICESERIALNUMBER in $MEMBERDEVICESERIALS ; do
-				DEVICETYPE=$(jq --arg device "${DEVICESERIALNUMBER}" -r '.devices[] | select(.serialNumber == $device) | .deviceType' ${DEVLIST})
+				DEVICETYPE=$(grep "${DEVICESERIALNUMBER}" ${DEVLIST}.txt | cut -d'=' -f 2)
 				NODESTOEXECUTE=$(add_node "$(node)" "${NODESTOEXECUTE}")
 
 				# add volume setting per device - the WHA volume is unrelyable
 				# don't set volume if Alexa.Music.PlaySearchPhrase is used
 				if [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
-					DEVICE=$(jq --arg device "${DEVICESERIALNUMBER}" -r '.devices[] | select(.serialNumber == $device) | .accountName' ${DEVLIST})
+					DEVICE=$(grep "${DEVICESERIALNUMBER}" ${DEVLIST}.txt | cut -d'=' -f 1)
 					get_volumes
 					VOLUMEPRENODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${SVOL}'\"') ${VOLUMEPRENODESTOEXECUTE})
 					VOLUMEPOSTNODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${VOL}'\"') ${VOLUMEPOSTNODESTOEXECUTE})
@@ -950,12 +956,12 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 show_queue()
 {
 	PARENT=""
-	PARENTID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST})
+	PARENTID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST}.json)
 	if [ "$PARENTID" != "null" ] ; then
-		PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST})
+		PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST}.json)
 		PARENT="&lemurId=${PARENTID}&lemurDeviceType=${PARENTDEVICE}"
 	fi
-	
+
  ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
   -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
   -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
@@ -1014,7 +1020,7 @@ get_volumes()
 	# try to retrieve the "currently playing" volume
 	VOLMAXAGE=1
 	VOL=$(get_volume)
-					
+
 	if [ -z "${VOL}" ] ; then
 		# get the normal volume of the current device type
 		C=0
@@ -1149,9 +1155,9 @@ last_alexa()
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
- "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+ "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
 # Serial number: | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
-# Device name:   | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}
+# Device name:   | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
 }
 
 #
@@ -1160,7 +1166,7 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 #
 last_command()
 {
-SERIALNUMBER=$(jq -r --arg device "$DEVICE" '.devices[] | select( .accountName == $device ) | .serialNumber' ${DEVLIST})
+SERIALNUMBER=$(jq -r --arg device "$DEVICE" '.devices[] | select( .accountName == $device ) | .serialNumber' ${DEVLIST}.json)
 ACTIVITIES=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
@@ -1180,7 +1186,9 @@ log_off()
 ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  https://${ALEXA}/logout > /dev/null
 
-rm -f ${DEVLIST}
+rm -f ${DEVLIST}.json
+rm -f ${DEVLIST}.txt
+rm -f ${DEVLIST}_wha.txt
 rm -f ${COOKIE}
 rm -f ${TMP}/.alexa.*.list
 rm -f ${TMP}/.alexa.volume.*
@@ -1208,10 +1216,10 @@ if [ $? -eq 0 ] ; then
 	fi
 fi
 
-if [ ! -f ${DEVLIST} ] ; then
+if [ ! -f ${DEVLIST}.json ] ; then
 	echo "device list does not exist. downloading ..."
 	get_devlist
-	if [ ! -f ${DEVLIST} ] ; then
+	if [ ! -f ${DEVLIST}.json ] ; then
 		echo "failed to download device list, aborting"
 		exit 1
 	fi
@@ -1229,7 +1237,7 @@ fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $( jq -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+		for DEVICE in $( jq -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
@@ -1268,7 +1276,7 @@ if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; the
 		fi
 	fi
 elif [ -n "$LEMUR" ] ; then
-	DEVICESERIALNUMBER=$(jq --arg device "${LEMUR}" -r '.devices[] | select(.accountName == $device and .deviceFamily == "WHA") | .serialNumber' ${DEVLIST})
+	DEVICESERIALNUMBER=$(jq --arg device "${LEMUR}" -r '.devices[] | select(.accountName == $device and .deviceFamily == "WHA") | .serialNumber' ${DEVLIST}.json)
 	if [ -n "$DEVICESERIALNUMBER" ] ; then
 		delete_multiroom
 	else
@@ -1284,12 +1292,14 @@ elif [ -n "$LEMUR" ] ; then
 		create_multiroom
 		echo
 	fi
-	rm -f ${DEVLIST}
+	rm -f ${DEVLIST}.json
+	rm -f ${DEVLIST}.txt
+	rm -f ${DEVLIST}_wha.txt
 	get_devlist
 elif [ -n "$BLUETOOTH" ] ; then
 	if [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
 		if [ "${DEVICE}" = "ALL" ] ; then
-			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST} | sed -r 's/ /%20/g') ; do
+			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
 				set_var
 				echo "bluetooth devices for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}:"
 				list_bluetooth
