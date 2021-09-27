@@ -123,6 +123,9 @@ SET_BROWSER='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:1.0) bash-script/1.0'
 # oathtool command line tool
 SET_OATHTOOL='/usr/bin/oathtool'
 
+# jq binary
+SET_JQ='/usr/bin/jq'
+
 # tmp path
 SET_TMP="/tmp"
 
@@ -160,6 +163,7 @@ OPTS=${OPTS:-$SET_OPTS}
 TTS_LOCALE=${TTS_LOCALE:-$SET_TTS_LOCALE}
 TMP=${TMP:-$SET_TMP}
 OATHTOOL=${OATHTOOL:-$SET_OATHTOOL}
+JQ=${JQ:-$SET_JQ}
 SPEAKVOL=${SPEAKVOL:-$SET_SPEAKVOL}
 NORMALVOL=${NORMALVOL:-$SET_NORMALVOL}
 VOLMAXAGE=${VOLMAXAGE:-$SET_VOLMAXAGE}
@@ -292,7 +296,7 @@ while [ "$#" -gt 0 ] ; do
 			# stationIDs are "s1234" or "s12345" 
 			if [ -n "${STATIONID##s[0-9][0-9][0-9][0-9]*}" -a -n "${STATIONID##p[0-9][0-9][0-9][0-9]*}" ] ; then
 				# search for station name
-				STATIONID=$(${CURL} ${OPTS} -s --data-urlencode "query=${STATIONID}" -G "https://api.tunein.com/profiles?fullTextSearch=true" | jq -r '.Items[] | select(.ContainerType == "Stations") | .Children[] | select( .Index==1 ) | .GuideId')
+				STATIONID=$(${CURL} ${OPTS} -s --data-urlencode "query=${STATIONID}" -G "https://api.tunein.com/profiles?fullTextSearch=true" | ${JQ} -r '.Items[] | select(.ContainerType == "Stations") | .Children[] | select( .Index==1 ) | .GuideId')
 				if [ -z "$STATIONID" ] ; then
 					echo "ERROR: no Station \"$2\" found on TuneIn"
 					exit 1
@@ -563,12 +567,12 @@ if [ -z "${REFRESH_TOKEN}" ] ; then
 	rm -f "${TMP}/.alexa.postdata"
 	rm -f "${TMP}/.alexa.postdata2"
 else
-#	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+#	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
 	# work around for cookies valid beyond 2038-01-19 on 32bit systems
 	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies > ${COOKIE}.json
-	sed -e "$(cat ${COOKIE}.json | jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
-	 jq -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+	sed -e "$(cat ${COOKIE}.json | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
+	 ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
 	if [ -z "$(grep ".${AMAZON}.*at-acbde" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
@@ -614,8 +618,8 @@ get_devlist()
 	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})"\
 	 "https://${ALEXA}/api/devices-v2/device?cached=false" > ${DEVLIST}.json
 
-	jq -r '.devices[] | "\(.accountName)=\(.deviceType)=\(.serialNumber)=\(.deviceFamily)"' ${DEVLIST}.json > ${DEVLIST}.txt
-	jq -r '.devices[] | select(.deviceFamily == "WHA") | "\(.accountName)=\(.clusterMembers[])"' ${DEVLIST}.json > ${DEVLIST}_wha.txt
+	${JQ} -r '.devices[] | "\(.accountName)=\(.deviceType)=\(.serialNumber)=\(.deviceFamily)"' ${DEVLIST}.json > ${DEVLIST}.txt
+	${JQ} -r '.devices[] | select(.deviceFamily == "WHA") | "\(.accountName)=\(.clusterMembers[])"' ${DEVLIST}.json > ${DEVLIST}_wha.txt
 }
 
 check_status()
@@ -658,7 +662,7 @@ set_var()
 	DEVICESERIALNUMBER=${DEVICESERIALNUMBER%=*}
 	# customerId is now retrieved from the logged in user
 	# the customerId in the device list is always from the user registering the device initially
-	# MEDIAOWNERCUSTOMERID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST}.json)
+	# MEDIAOWNERCUSTOMERID=$(${JQ} --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST}.json)
 
 	if [ -z "${DEVICESERIALNUMBER}" ] ; then
 		echo "ERROR: unkown device dev:${DEVICE}"
@@ -671,7 +675,7 @@ set_var()
 #
 list_devices()
 {
-	jq -r '.devices[].accountName' ${DEVLIST}.json
+	${JQ} -r '.devices[].accountName' ${DEVLIST}.json
 }
 
 #
@@ -691,7 +695,7 @@ sanitize_search()
 	${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X POST -d "${JSON}" \
-	 "https://${ALEXA}/api/behaviors/operation/validate" | jq -r '.operationPayload.sanitizedSearchPhrase'
+	 "https://${ALEXA}/api/behaviors/operation/validate" | ${JQ} -r '.operationPayload.sanitizedSearchPhrase'
 }
 
 #
@@ -735,16 +739,16 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
 		 "https://${ALEXA}/api/behaviors/v2/automations?limit=200" > "${TMP}/.alexa.automation"
 
-		AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
+		AUTOMATION=$(${JQ} --arg utterance "${UTTERANCE}" -r '.[] | select( .triggers[].payload.utterance == $utterance) | .automationId' "${TMP}/.alexa.automation")
 		if [ -z "${AUTOMATION}" ] ; then
-			AUTOMATION=$(jq --arg utterance "${UTTERANCE}" -r '.[] | select( .name == $utterance) | .automationId' "${TMP}/.alexa.automation")
+			AUTOMATION=$(${JQ} --arg utterance "${UTTERANCE}" -r '.[] | select( .name == $utterance) | .automationId' "${TMP}/.alexa.automation")
 			if [ -z "${AUTOMATION}" ] ; then
 				echo "ERROR: no such utterance '${UTTERANCE}' in Alexa routines"
 				rm -f "${TMP}/.alexa.automation"
 				exit 1
 			fi
 		fi
-		SEQUENCE=$(jq --arg automation "${AUTOMATION}" -r -c '.[] | select( .automationId == $automation) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
+		SEQUENCE=$(${JQ} --arg automation "${AUTOMATION}" -r -c '.[] | select( .automationId == $automation) | .sequence' "${TMP}/.alexa.automation" | sed 's/"/\\"/g' | sed "s/ALEXA_CURRENT_DEVICE_TYPE/${DEVICETYPE}/g" | sed "s/ALEXA_CURRENT_DSN/${DEVICESERIALNUMBER}/g" | sed "s/ALEXA_CUSTOMER_ID/${MEDIAOWNERCUSTOMERID}/g")
 		rm -f "${TMP}/.alexa.automation"
 
 		ALEXACMD='{"behaviorId":"'${AUTOMATION}'","sequenceJson":"'${SEQUENCE}'","status":"ENABLED"}'
@@ -912,17 +916,17 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
  "https://${ALEXA}/api/cloudplayer/playlists/${TYPE}-V0-OBJECTID?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&size=${SIZE}&offset=${OFFSET}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}" > ${FILE}.tmp
 
-			OFFSET=$(jq -r '.nextResultsToken' ${FILE}.tmp)
-			SIZE=$(jq -r '.playlist | .trackCount' ${FILE}.tmp)
-			jq -r -c '.playlist | .entryList' ${FILE}.tmp >> ${FILE}
+			OFFSET=$(${JQ} -r '.nextResultsToken' ${FILE}.tmp)
+			SIZE=$(${JQ} -r '.playlist | .trackCount' ${FILE}.tmp)
+			${JQ} -r -c '.playlist | .entryList' ${FILE}.tmp >> ${FILE}
 			echo "," >> ${FILE}
 			TOTAL=$((TOTAL+SIZE))
 		done
 		echo "[]],\"trackCount\":\"${TOTAL}\"}}" >> ${FILE}
 		rm -f ${FILE}.tmp
 	fi
-	jq -r '.playlist.trackCount' ${FILE}
-	jq '.playlist.entryList[] | .[]' ${FILE}
+	${JQ} -r '.playlist.trackCount' ${FILE}
+	${JQ} '.playlist.entryList[] | .[]' ${FILE}
 }
 
 #
@@ -939,7 +943,7 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
  "https://${ALEXA}/api/prime/{$PRIME}?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}&mediaOwnerCustomerId=${MEDIAOWNERCUSTOMERID}" > ${FILE}
 
 		if [ "$PRIME" = "prime-playlist-browse-nodes" ] ; then
-			for I in $(jq -r '.primePlaylistBrowseNodeList[].subNodes[].nodeId' ${FILE} 2>/dev/null) ; do
+			for I in $(${JQ} -r '.primePlaylistBrowseNodeList[].subNodes[].nodeId' ${FILE} 2>/dev/null) ; do
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
@@ -947,7 +951,7 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 			done
 		fi
 	fi
-	jq '.' ${FILE}
+	${JQ} '.' ${FILE}
 }
 
 #
@@ -956,26 +960,26 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 show_queue()
 {
 	PARENT=""
-	PARENTID=$(jq --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST}.json)
+	PARENTID=$(${JQ} --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .parentClusters[0]' ${DEVLIST}.json)
 	if [ "$PARENTID" != "null" ] ; then
-		PARENTDEVICE=$(jq --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST}.json)
+		PARENTDEVICE=$(${JQ} --arg serial ${PARENTID} -r '.devices[] | select(.serialNumber == $serial) | .deviceType' ${DEVLIST}.json)
 		PARENT="&lemurId=${PARENTID}&lemurDeviceType=${PARENTDEVICE}"
 	fi
 
  ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
   -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
   -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-  "https://${ALEXA}/api/np/player?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}${PARENT}" | jq '.'
+  "https://${ALEXA}/api/np/player?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}${PARENT}" | ${JQ} '.'
 
  ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
   -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
   -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-  "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq '.'
+  "https://${ALEXA}/api/media/state?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | ${JQ} '.'
 
  ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
   -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
   -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-  "https://${ALEXA}/api/np/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | jq '.'
+  "https://${ALEXA}/api/np/queue?deviceSerialNumber=${DEVICESERIALNUMBER}&deviceType=${DEVICETYPE}" | ${JQ} '.'
 }
 
 get_music_channels()
@@ -983,7 +987,7 @@ get_music_channels()
    ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
     -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
     -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-    "https://${ALEXA}/api/behaviors/entities?skillId=amzn1.ask.1p.music" | jq -r '.[] | select( .supportedProperties[] == "Alexa.Music.PlaySearchPhrase" ) |  "\(.id) - \(.displayName) \(.description)"'
+    "https://${ALEXA}/api/behaviors/entities?skillId=amzn1.ask.1p.music" | ${JQ} -r '.[] | select( .supportedProperties[] == "Alexa.Music.PlaySearchPhrase" ) |  "\(.id) - \(.displayName) \(.description)"'
 }
 
 #
@@ -1049,7 +1053,7 @@ get_volume()
 		VOL=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 				-H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 				-H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-				"https://${ALEXA}/api/devices/deviceType/dsn/audio/v1/allDeviceVolumes" | jq -r  --arg device "${DEVICESERIALNUMBER}" '.volumes[] | "\(.dsn) \(.speakerVolume) \(.speakerMuted)"')
+				"https://${ALEXA}/api/devices/deviceType/dsn/audio/v1/allDeviceVolumes" | ${JQ} -r  --arg device "${DEVICESERIALNUMBER}" '.volumes[] | "\(.dsn) \(.speakerVolume) \(.speakerMuted)"')
 
 		if [ -n "${VOL}" ] ; then
 			# write volume and mute state to file
@@ -1121,7 +1125,7 @@ list_bluetooth()
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
- "https://${ALEXA}/api/bluetooth?cached=false" | jq --arg serial "${DEVICESERIALNUMBER}" -r '.bluetoothStates[] | select(.deviceSerialNumber == $serial) | "\(.pairedDeviceList[]?.address) \(.pairedDeviceList[]?.friendlyName)"'
+ "https://${ALEXA}/api/bluetooth?cached=false" | ${JQ} --arg serial "${DEVICESERIALNUMBER}" -r '.bluetoothStates[] | select(.deviceSerialNumber == $serial) | "\(.pairedDeviceList[]?.address) \(.pairedDeviceList[]?.friendlyName)"'
 }
 
 #
@@ -1155,9 +1159,9 @@ last_alexa()
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
- "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
-# Serial number: | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
-# Device name:   | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i jq -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
+ "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i ${JQ} -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
+# Serial number: | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
+# Device name:   | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i ${JQ} -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
 }
 
 #
@@ -1166,15 +1170,15 @@ ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep
 #
 last_command()
 {
-SERIALNUMBER=$(jq -r --arg device "$DEVICE" '.devices[] | select( .accountName == $device ) | .serialNumber' ${DEVLIST}.json)
+SERIALNUMBER=$(${JQ} -r --arg device "$DEVICE" '.devices[] | select( .accountName == $device ) | .serialNumber' ${DEVLIST}.json)
 ACTIVITIES=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
  "https://${ALEXA}/api/activities?startTime=&size=10&offset=1")
 if [ -z "$DEVICE" ] ; then
-	echo "$ACTIVITIES" | jq -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .description' | jq -r .summary
+	echo "$ACTIVITIES" | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .description' | ${JQ} -r .summary
 else
-	echo "$ACTIVITIES" | jq -r --arg serialnumber "$SERIALNUMBER" '[.activities[] | select( .activityStatus == "SUCCESS" ) | select( .sourceDeviceIds[].serialNumber == $serialnumber)][0] | .description' | jq -r .summary
+	echo "$ACTIVITIES" | ${JQ} -r --arg serialnumber "$SERIALNUMBER" '[.activities[] | select( .activityStatus == "SUCCESS" ) | select( .sourceDeviceIds[].serialNumber == $serialnumber)][0] | .description' | ${JQ} -r .summary
 fi
 }
 
@@ -1237,7 +1241,7 @@ fi
 
 if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; then
 	if [ "${DEVICE}" = "ALL" ] ; then
-		for DEVICE in $( jq -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
+		for DEVICE in $( ${JQ} -r '.devices[] | select( ( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA" )  and .online == true ) | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
 			set_var
 			if [ -n "$COMMAND" ] ; then
 				echo "sending cmd:${COMMAND} to dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER} customerid:${MEDIAOWNERCUSTOMERID}"
@@ -1276,7 +1280,7 @@ if [ -n "$COMMAND" -o -n "$QUEUE" -o -n "$NOTIFICATIONS" -o -n "$GETVOL" ] ; the
 		fi
 	fi
 elif [ -n "$LEMUR" ] ; then
-	DEVICESERIALNUMBER=$(jq --arg device "${LEMUR}" -r '.devices[] | select(.accountName == $device and .deviceFamily == "WHA") | .serialNumber' ${DEVLIST}.json)
+	DEVICESERIALNUMBER=$(${JQ} --arg device "${LEMUR}" -r '.devices[] | select(.accountName == $device and .deviceFamily == "WHA") | .serialNumber' ${DEVLIST}.json)
 	if [ -n "$DEVICESERIALNUMBER" ] ; then
 		delete_multiroom
 	else
@@ -1299,7 +1303,7 @@ elif [ -n "$LEMUR" ] ; then
 elif [ -n "$BLUETOOTH" ] ; then
 	if [ "$BLUETOOTH" = "list" -o "$BLUETOOTH" = "List" -o "$BLUETOOTH" = "LIST" ] ; then
 		if [ "${DEVICE}" = "ALL" ] ; then
-			for DEVICE in $(jq -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
+			for DEVICE in $(${JQ} -r '.devices[] | select( .deviceFamily == "ECHO" or .deviceFamily == "KNIGHT" or .deviceFamily == "ROOK" or .deviceFamily == "WHA") | .accountName' ${DEVLIST}.json | sed -r 's/ /%20/g') ; do
 				set_var
 				echo "bluetooth devices for dev:${DEVICE} type:${DEVICETYPE} serial:${DEVICESERIALNUMBER}:"
 				list_bluetooth
