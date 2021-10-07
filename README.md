@@ -22,7 +22,7 @@ DEVICEVOLNAME   - a list of device names with specific volume settings (space se
 DEVICEVOLSPEAK  - a list of speak volume levels - matching the devices above
 DEVICEVOLNORMAL - a list of normal volume levels- matching the devices above
                   (current playing volume takes precedence for normal volume)
-
+REFRESH_TOKEN - the new preference over EMAIL/PASSWORD can be obtained here: https://github.com/adn77/alexa-cookie-cli
 ```
 You will very likely want to set the language to:
 ```
