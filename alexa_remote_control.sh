@@ -73,6 +73,7 @@
 # 2021-09-13: v0.20 implemented device registration refresh_token cookie exchange flow as an alternative
 #               to logging in
 # 2021-09-15: v0.20a optimized speak commands to use less JQ. This is useful in low-resource environments
+# 2021-10-07: v0.20b fixed different cookie naming for amazon.com
 #
 ###
 #
@@ -243,7 +244,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.20a"
+			echo "v0.20b"
 			exit 0
 			;;
 		-d)
@@ -574,7 +575,7 @@ else
 	sed -e "$(cat ${COOKIE}.json | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
 	 ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
-	if [ -z "$(grep ".${AMAZON}.*at-acbde" ${COOKIE})" ] ; then
+	if [ -z "$(grep "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
 		exit 1
 	fi
@@ -588,21 +589,21 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Con
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  https://${ALEXA}/api/language > /dev/null
 
-if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from handlebars"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
 fi
 
-if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from devices-v2"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/api/devices-v2/device?cached=false > /dev/null
 fi
 
-if [ -z "$(grep ".${AMAZON}.*csrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "ERROR: no CSRF cookie received"
 	exit 1
 fi
