@@ -68,6 +68,8 @@ alexa-remote-control [-d <device>|ALL] -e <pause|play|next|prev|fwd|rwd|shuffle|
 
 There's also a (NOW DEPRECATED) "plain" version, which lacks some functionality (-z, -i, -p, -P, -S and no radio station names and no routines) but doesn't require 'jq' for JSON processing.
 
+Old option MFA
+----
 In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
 1. You should have MFA using an App already working before proceeding
 1. Add a new app
@@ -79,4 +81,8 @@ In order to use MFA, one needs to obtain the MFA_SECRET from Amazon account:
 
 It is assumed that MFA secured accounts are less likely to get a captcha response during login - that's why MFA might yield better results if the plain username/password didn't work for you.
 
-http://blog.loetzimmer.de/2017/10/amazon-alexa-hort-auf-die-shell-echo.html
+New option REFRESH_TOKEN
+----
+The Alexa-App way of logging in is using a REFRESH_TOKEN which allows for obtaining the session cookies. This replaces EMAIL/PASSWORD/MFA so those will not be exposed in any scripts anymore. For convinience I created a binary, ready to run: https://github.com/adn77/alexa-cookie-cli
+
+https://blog.loetzimmer.de/2021/09/alexa-remote-control-shell-script.html
