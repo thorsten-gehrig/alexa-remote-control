@@ -575,7 +575,7 @@ else
 	sed -e "$(cat ${COOKIE}.json | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
 	 ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
-	if [ -z "$(grep "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
+	if [ -z "$(grep -E "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
 		exit 1
 	fi
@@ -589,21 +589,21 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Con
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  https://${ALEXA}/api/language > /dev/null
 
-if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from handlebars"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
 fi
 
-if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from devices-v2"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/api/devices-v2/device?cached=false > /dev/null
 fi
 
-if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "ERROR: no CSRF cookie received"
 	exit 1
 fi
