@@ -74,6 +74,9 @@
 #               to logging in
 # 2021-09-15: v0.20a optimized speak commands to use less JQ. This is useful in low-resource environments
 # 2021-10-07: v0.20b fixed different cookie naming for amazon.com
+# 2021-11-16: v0.20c fixed AlexaApp device selection: since they're all called "This Device" use corresponding
+#               line in /tmp/.alexa.devicelist.txt, e.g.: -d "This Device=A2TF17PFR55MTB=ce0123456789abcdef01=VOX"
+#               -lastalexa now returns this string. Make sure to put the device in double quotes!
 #
 ###
 #
@@ -244,7 +247,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.20b"
+			echo "v0.20c"
 			exit 0
 			;;
 		-d)
@@ -575,7 +578,7 @@ else
 	sed -e "$(cat ${COOKIE}.json | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | awk '$3 >= 2038 { print "s/"$1" "$2" "$3" "$4" "$5"/"$1" "$2" "2037" "$4" "$5"/g" ;}')" ${COOKIE}.json |\
 	 ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
-	if [ -z "$(grep -E "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
+	if [ -z "$(grep "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
 		exit 1
 	fi
@@ -589,21 +592,21 @@ ${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Con
  -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  https://${ALEXA}/api/language > /dev/null
 
-if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from handlebars"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/templates/oobe/d-device-pick.handlebars > /dev/null
 fi
 
-if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "trying to get CSRF from devices-v2"
 	${CURL} ${OPTS} -s -c ${COOKIE} -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
 	 -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
 	 https://${ALEXA}/api/devices-v2/device?cached=false > /dev/null
 fi
 
-if [ -z "$(grep -E "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
+if [ -z "$(grep "\.${AMAZON}.*\scsrf" ${COOKIE})" ] ; then
 	echo "ERROR: no CSRF cookie received"
 	exit 1
 fi
@@ -620,6 +623,7 @@ get_devlist()
 	 "https://${ALEXA}/api/devices-v2/device?cached=false" > ${DEVLIST}.json
 
 	${JQ} -r '.devices[] | "\(.accountName)=\(.deviceType)=\(.serialNumber)=\(.deviceFamily)"' ${DEVLIST}.json > ${DEVLIST}.txt
+	${JQ} -r '.devices[] | select( .appDeviceList | length >0 ) as $p | .appDeviceList[] | "\($p.accountName)=\(.deviceType)=\(.serialNumber)=\($p.deviceFamily)"' ${DEVLIST}.json >> ${DEVLIST}.txt
 	${JQ} -r '.devices[] | select(.deviceFamily == "WHA") | "\(.accountName)=\(.clusterMembers[])"' ${DEVLIST}.json > ${DEVLIST}_wha.txt
 }
 
@@ -661,6 +665,7 @@ set_var()
 	DEVICETYPE=${DEVICESERIALNUMBER%%=*}
 	DEVICESERIALNUMBER=${DEVICESERIALNUMBER#*=}
 	DEVICESERIALNUMBER=${DEVICESERIALNUMBER%=*}
+
 	# customerId is now retrieved from the logged in user
 	# the customerId in the device list is always from the user registering the device initially
 	# MEDIAOWNERCUSTOMERID=$(${JQ} --arg device "${DEVICE}" -r '.devices[] | select(.accountName == $device) | .deviceOwnerCustomerId' ${DEVLIST}.json)
@@ -1160,9 +1165,7 @@ last_alexa()
 ${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L\
  -H "Content-Type: application/json; charset=UTF-8" -H "Referer: https://alexa.${AMAZON}/spa/index.html" -H "Origin: https://alexa.${AMAZON}"\
  -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET\
- "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i ${JQ} -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
-# Serial number: | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber'
-# Device name:   | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i ${JQ} -r --arg device {} '.devices[] | select( .serialNumber == $device) | .accountName' ${DEVLIST}.json
+ "https://${ALEXA}/api/activities?startTime=&size=10&offset=1" | ${JQ} -r '[.activities[] | select( .activityStatus == "SUCCESS" )][0] | .sourceDeviceIds[0].serialNumber' | xargs -i grep -m 1 {} ${DEVLIST}.txt
 }
 
 #
