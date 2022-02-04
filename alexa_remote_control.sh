@@ -77,6 +77,7 @@
 # 2021-11-16: v0.20c fixed AlexaApp device selection: since they're all called "This Device" use corresponding
 #               line in /tmp/.alexa.devicelist.txt, e.g.: -d "This Device=A2TF17PFR55MTB=ce0123456789abcdef01=VOX"
 #               -lastalexa now returns this string. Make sure to put the device in double quotes!
+# 2022-02-04: v0.20d minor volume fix (write volume to volume cache when volume is changed)
 #
 ###
 #
@@ -247,7 +248,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.20c"
+			echo "v0.20d"
 			exit 0
 			;;
 		-d)
@@ -776,9 +777,18 @@ if [ -n "${SEQUENCECMD}" ] ; then
 				DEVICETYPE=$(grep "${DEVICESERIALNUMBER}" ${DEVLIST}.txt | cut -d'=' -f 2)
 				NODESTOEXECUTE=$(add_node "$(node)" "${NODESTOEXECUTE}")
 
+				# if SequenceCommand is "Alexa.DeviceControls.Volume" we have to adjust the local volume cache
+				if [ "$SEQUENCECMD" = "Alexa.DeviceControls.Volume" ] ; then
+					VOL=${SEQUENCEVAL%\\\"}
+					VOL=${VOL##*\\\"}
+					if [ $VOL -gt 0 ] ; then
+						echo $VOL false > "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
+					else
+						echo 0 true > "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
+					fi
 				# add volume setting per device - the WHA volume is unrelyable
 				# don't set volume if Alexa.Music.PlaySearchPhrase is used
-				if [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
+				elif [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
 					DEVICE=$(grep "${DEVICESERIALNUMBER}" ${DEVLIST}.txt | cut -d'=' -f 1)
 					get_volumes
 					VOLUMEPRENODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${SVOL}'\"') ${VOLUMEPRENODESTOEXECUTE})
@@ -793,8 +803,16 @@ if [ -n "${SEQUENCECMD}" ] ; then
 		else
 			NODESTOEXECUTE=$(add_node "$(node)" "${NODESTOEXECUTE}")
 
+			if [ "$SEQUENCECMD" = "Alexa.DeviceControls.Volume" ] ; then
+				VOL=${SEQUENCEVAL%\\\"}
+				VOL=${VOL##*\\\"}
+				if [ $VOL -gt 0 ] ; then
+					echo $VOL false > "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
+				else
+					echo 0 true > "${TMP}/.alexa.volume.${DEVICESERIALNUMBER}"
+				fi
 			# don't set volume if Alexa.Music.PlaySearchPhrase is used
-			if [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
+			elif [ \( $SPEAKVOL -gt 0 -o -n "${DEVICEVOLSPEAK}" \) -a "${SEQUENCECMD}" != "Alexa.Music.PlaySearchPhrase" ] ; then
 				get_volumes
 				VOLUMEPRENODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${SVOL}'\"') ${VOLUMEPRENODESTOEXECUTE})
 				VOLUMEPOSTNODESTOEXECUTE=$(add_node $(node Alexa.DeviceControls.Volume ',\"value\":\"'${VOL}'\"') ${VOLUMEPOSTNODESTOEXECUTE})
