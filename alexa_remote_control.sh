@@ -1242,7 +1242,7 @@ if [ $? -eq 0 ] ; then
 	fi
 fi
 
-if [ ! -f ${DEVLIST}.json ] ; then
+if [ ! -f ${DEVLIST}.json -o ! -f ${DEVLIST}.txt ] ; then
 	echo "device list does not exist. downloading ..."
 	get_devlist
 	if [ ! -f ${DEVLIST}.json ] ; then
