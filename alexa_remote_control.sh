@@ -234,7 +234,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.20d"
+			echo "v0.21"
 			exit 0
 			;;
 		-d)
