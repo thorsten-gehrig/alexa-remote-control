@@ -82,6 +82,7 @@
 # 2024-01-29: v0.21 removed legacy login methods as they were no longer working
 #                   implemented new API calls for -lastalexa and -lastcommand
 #                   there is now an OS-type switch that hopefully handles OSX and BSD date creation
+# 2024-01-31: v0.21a trying all different date options which come to mind (first working wins)
 #
 ###
 #
@@ -234,7 +235,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.21"
+			echo "v0.21a"
 			exit 0
 			;;
 		-d)
@@ -505,30 +506,19 @@ if [ -z "${REFRESH_TOKEN}" ] ; then
 else
 #	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
-	BSD=$(uname | tr '[:upper:]' '[:lower:]' | grep -E 'darwin|bsd')
 
 	# workaround for cookies valid beyond 2038-01-19 on 32-bit systems
 	toEpoch() {
 		local x
 		while read x
 		do
-			if [ -n "${BSD}" ] ; then
-				echo "$x" | awk '{
-					if ($3 >= 2038) {
-						print "s/"$1" "$2" "$3" "$4" "$5"/2147483647/g"
-					} else {
-						print "s/"$1" "$2" "$3" "$4" "$5"/'"$(date -j -f "%d %b %Y %H:%M:%S %Z" "$x" +"%s")"'/g"
-					}
-				}'
-			else
-				echo "$x" | awk '{
-					if ($3 >= 2038) {
-						print "s/"$1" "$2" "$3" "$4" "$5"/2147483647/g"
-					} else {
-						print "s/"$1" "$2" "$3" "$4" "$5"/'"$(date -d "$x" -u +"%s")"'/g"
-					}
-				}'
-			fi
+			echo "$x" | awk '{
+				if ($3 >= 2038) {
+					print "s/"$1" "$2" "$3" "$4" "$5"/2147483647/g"
+				} else {
+					print "s/"$1" "$2" "$3" "$4" "$5"/'"$(set +e; date -d "$x" -u +"%s" 2>/dev/null || date -d "$x" -D "%d %b %Y %H:%M:%S %Z" -u +"%s" 2>/dev/null || date -j -f "%d %b %Y %H:%M:%S %Z" "$x" +"%s" 2>/dev/null )"'/g"
+				}
+			}'
 		done
 	}
 
