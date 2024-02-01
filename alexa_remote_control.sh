@@ -83,6 +83,7 @@
 #                   implemented new API calls for -lastalexa and -lastcommand
 #                   there is now an OS-type switch that hopefully handles OSX and BSD date creation
 # 2024-01-31: v0.21a trying all different date options which come to mind (first working wins)
+# 2024-02-01: v0.21b changed the output of -lastalexa back to the output of devicelist.txt 
 #
 ###
 #
@@ -235,7 +236,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.21a"
+			echo "v0.21b"
 			exit 0
 			;;
 		-d)
@@ -503,6 +504,8 @@ if [ -z "${REFRESH_TOKEN}" ] ; then
 	echo
 	echo "Please use the device login process https://github.com/adn77/alexa-cookie-cli"
 	echo " all you need is the 'refreshToken' looking sth. like 'Atnr|...'"
+
+	exit 1
 else
 #	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
@@ -530,7 +533,6 @@ else
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
 		exit 1
 	fi
-	rm -rf ${COOKIE}.json
 fi
 
 #
@@ -1165,9 +1167,8 @@ get_history()
 last_alexa()
 {
 	get_history
-	${JQ} -r '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .device.deviceName' ${TMP}/.alexa.activity.json
+	${JQ} -r '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .recordKey' /tmp/.alexa.activity.json | cut -d'#' -f4 | xargs -i grep -m 1 {} ${DEVLIST}.txt
 }
-
 #
 # last command or last command of a specific device
 #
