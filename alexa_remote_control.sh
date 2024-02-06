@@ -1167,7 +1167,7 @@ get_history()
 last_alexa()
 {
 	get_history
-	${JQ} -r '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .recordKey' /tmp/.alexa.activity.json | cut -d'#' -f4 | xargs -i grep -m 1 {} ${DEVLIST}.txt
+	${JQ} -r '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .recordKey' ${TMP}/.alexa.activity.json | cut -d'#' -f4 | xargs -i grep -m 1 {} ${DEVLIST}.txt
 }
 #
 # last command or last command of a specific device
