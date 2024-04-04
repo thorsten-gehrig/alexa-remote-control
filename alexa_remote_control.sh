@@ -83,7 +83,9 @@
 #                   implemented new API calls for -lastalexa and -lastcommand
 #                   there is now an OS-type switch that hopefully handles OSX and BSD date creation
 # 2024-01-31: v0.21a trying all different date options which come to mind (first working wins)
-# 2024-02-01: v0.21b changed the output of -lastalexa back to the output of devicelist.txt 
+# 2024-02-01: v0.21b changed the output of -lastalexa back to the output of devicelist.txt
+# 2024-04-06: v0.22 changed the date calculation once again, now the date processing ignores the actual cookie validity
+#                    and simply sets it to "now + COOKIE_LIFETIME"
 #
 ###
 #
@@ -166,6 +168,7 @@ DEVICEVOLNORMAL=${DEVICEVOLNORMAL:-$SET_DEVICEVOLNORMAL}
 
 COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist"
+COOKIE_LIFETIME=$(( 24 * 60 * 60 )) # default lifetime of one day before revalidation
 
 GUIVERSION=0
 
@@ -236,7 +239,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.21b"
+			echo "v0.22"
 			exit 0
 			;;
 		-d)
@@ -507,27 +510,12 @@ if [ -z "${REFRESH_TOKEN}" ] ; then
 
 	exit 1
 else
-#	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= ( strptime("%d %b %Y %H:%M:%S %Z") | mktime ) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+	now=$(date +%s)
+	exp=$(( now + COOKIE_LIFETIME ))
 
-
-	# workaround for cookies valid beyond 2038-01-19 on 32-bit systems
-	toEpoch() {
-		local x
-		while read x
-		do
-			echo "$x" | awk '{
-				if ($3 >= 2038) {
-					print "s/"$1" "$2" "$3" "$4" "$5"/2147483647/g"
-				} else {
-					print "s/"$1" "$2" "$3" "$4" "$5"/'"$(set +e; date -d "$x" -u +"%s" 2>/dev/null || date -d "$x" -D "%d %b %Y %H:%M:%S %Z" -u +"%s" 2>/dev/null || date -j -f "%d %b %Y %H:%M:%S %Z" "$x" +"%s" 2>/dev/null )"'/g"
-				}
-			}'
-		done
-	}
-
-	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies > ${COOKIE}.json
-	sed -e "$(cat ${COOKIE}.json | ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | .Expires' | toEpoch)" ${COOKIE}.json |\
-	 ${JQ} -r '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
+	# the date processing ignores the actual cookie validity and simply sets it to "now + COOKIE_LIFETIME"
+	${CURL} ${OPTS} -s -X POST --data "app_name=Amazon%20Alexa&requested_token_type=auth_cookies&domain=www.${AMAZON}&source_token_type=refresh_token" --data-urlencode "source_token=${REFRESH_TOKEN}" -H "x-amzn-identity-auth-domain: api.${AMAZON}" https://api.${AMAZON}/ap/exchangetoken/cookies |\
+	 ${JQ} -r --arg exp $exp '.response.tokens.cookies | to_entries[] | .key as $domain | .value[] | map_values(if . == true then "TRUE" elif . == false then "FALSE" else . end) | .Expires |= $exp | [(if .HttpOnly=="TRUE" then ("#HttpOnly_" + $domain) else $domain end), "TRUE", .Path, .Secure, .Expires, .Name, .Value] | @tsv' > ${COOKIE}
 
 	if [ -z "$(grep "\.${AMAZON}.*\sat-" ${COOKIE})" ] ; then
 		echo "ERROR: cookie retrieval with refresh_token didn't work"
