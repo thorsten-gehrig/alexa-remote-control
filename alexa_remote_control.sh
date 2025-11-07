@@ -14,7 +14,7 @@
 # 2017-11-25: v0.7 added multiroom create/delete, playback of library playlist
 # 2017-11-30: v0.7a added US config, fixed device names containing spaces
 # 2017-12-07: v0.7b added Bluetooth connect/disconnect
-# 2017-12-18: v0.7c fixed US version
+# 2017-12-18: v0.7c fixed US 
 # 2017-12-19: v0.7d fixed AWK csrf extraction on some systems
 # 2017-12-20: v0.7e moved get_devlist after check_status
 # 2018-01-08: v0.7f added echo-show to ALL group, TuneIn station can now be up to 6 digits
@@ -37,7 +37,7 @@
 # 2018-06-18: v0.10b added Alexa routine execution
 # 2019-01-22: v0.11 added repeat command, added environment variable parsing
 # 2019-02-03: v0.11a fixed string escape for automation and speak commands
-# 2019-02-10: v0.12 added "-d ALL" to the plain version, lastalexa now checks for SUCCESS activityStatus
+# 2019-02-10: v0.12 added "-d ALL" to the plain , lastalexa now checks for SUCCESS activityStatus
 # 2019-02-14: v0.12a reduced the number of replaced characters for TTS and automation
 # 2019-06-18: v0.12b fixed CSRF
 # 2019-06-28: v0.12c properly fixed CSRF
@@ -171,7 +171,7 @@ COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist"
 COOKIE_LIFETIME=$(( 24 * 60 * 60 )) # default lifetime of one day before revalidation
 
-GUIVERSION=0
+GUI=0
 
 LIST=""
 LOGOFF=""
@@ -239,8 +239,8 @@ usage()
 
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
-		--version)
-			echo "v0.22"
+		--)
+			echo "v0.23"
 			exit 0
 			;;
 		-d)
@@ -569,15 +569,15 @@ get_devlist()
 check_status()
 {
 #
-# bootstrap with GUI-Version writes GUI version to cookie
+# bootstrap with GUI- writes GUI  to cookie
 #  returns among other the current authentication state
 #
-#AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION})
+#AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?=${GUI})
 AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -o /dev/null -s -w "%{http_code}" -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/customer-status)
 #echo $AUTHSTATUS
 #MEDIAOWNERCUSTOMERID=$(echo $AUTHSTATUS | sed -r 's/^.*"customerId":"([^,]+)",.*$/\1/g')
 #AUTHSTATUS=$(echo $AUTHSTATUS | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
-MEDIAOWNERCUSTOMERID=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L "https://${ALEXA}/api/users/me?platform=ios&version=2.2.651540.0" | jq -r .id)
+MEDIAOWNERCUSTOMERID=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L "https://${ALEXA}/api/users/me?platform=ios&=2.2.651540.0" | jq -r .id)
 	if [ "$AUTHSTATUS" != "401" ] ; then
 		return 1
 	fi
