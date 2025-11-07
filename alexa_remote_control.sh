@@ -86,6 +86,8 @@
 # 2024-02-01: v0.21b changed the output of -lastalexa back to the output of devicelist.txt
 # 2024-04-06: v0.22 changed the date calculation once again, now the date processing ignores the actual cookie validity
 #                    and simply sets it to "now + COOKIE_LIFETIME"
+# 2025-11-07: v0.23 /api/bootstrap is gone, switched to /api/customer-status 
+#				(thanks once again to Ingo Fischer)
 #
 ###
 #
@@ -170,8 +172,6 @@ COOKIE="${TMP}/.alexa.cookie"
 DEVLIST="${TMP}/.alexa.devicelist"
 COOKIE_LIFETIME=$(( 24 * 60 * 60 )) # default lifetime of one day before revalidation
 
-GUIVERSION=0
-
 LIST=""
 LOGOFF=""
 COMMAND=""
@@ -239,7 +239,7 @@ usage()
 while [ "$#" -gt 0 ] ; do
 	case "$1" in
 		--version)
-			echo "v0.22"
+			echo "v0.23"
 			exit 0
 			;;
 		-d)
@@ -568,18 +568,22 @@ get_devlist()
 check_status()
 {
 #
-# bootstrap with GUI-Version writes GUI version to cookie
-#  returns among other the current authentication state
+#  returns the current authentication state (HTTP/200)
 #
-	AUTHSTATUS=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/bootstrap?version=${GUIVERSION})
-	MEDIAOWNERCUSTOMERID=$(echo $AUTHSTATUS | sed -r 's/^.*"customerId":"([^,]+)",.*$/\1/g')
-	AUTHSTATUS=$(echo $AUTHSTATUS | sed -r 's/^.*"authenticated":([^,]+),.*$/\1/g')
+	AUTHSTATUS=$(${CURL} ${OPTS} -s -w "%{http_code}" -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/customer-status -o ${TMP}/.alexa.authstatus.json)
 
-	if [ "$AUTHSTATUS" = "true" ] ; then
-		return 1
-	fi
-
-	return 0
+	case $AUTHSTATUS in
+		200)
+			MEDIAOWNERCUSTOMERID=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/users/me | ${JQ} '.id')
+			return 1
+			;;
+		401|403)
+			return 0
+			;;
+		*)
+			;;
+	esac
+	echo "ERROR: /api/customer-status returned unexpected HTTP/${AUTHSTATUS}"
 }
 
 #
