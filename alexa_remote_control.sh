@@ -574,7 +574,7 @@ check_status()
 
 	case $AUTHSTATUS in
 		200)
-			MEDIAOWNERCUSTOMERID=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/users/me | ${JQ} '.id')
+			MEDIAOWNERCUSTOMERID=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L https://${ALEXA}/api/users/me | ${JQ} -r '.id')
 			return 1
 			;;
 		401|403)
