@@ -1139,7 +1139,7 @@ get_history()
 	RES=$(${CURL} ${OPTS} -s -b ${COOKIE} -A "${BROWSER}" -H "DNT: 1" -H "Connection: keep-alive" -L -w "%{http_code}" \
 	 	 -H "Content-Type: application/json; charset=UTF-8" -H "anti-csrftoken-a2z: $(cat ${TMP}/.alexa.activity.csrf)" \
 	 	 -H "csrf: $(awk "\$0 ~/.${AMAZON}.*csrf[ \\s\\t]+/ {print \$7}" ${COOKIE})" -X GET \
-		 "https://www.${AMAZON}/alexa-privacy/apd/rvh/customer-history-records?startTime=0&endTime=2147483647000&recordType=VOICE_HISTORY&maxRecordSize=50" -o ${TMP}/.alexa.activity.json)
+		 "https://www.${AMAZON}/alexa-privacy/apd/rah/alexa-history-records-v2?startTime=0&endTime=2147483647000" -o ${TMP}/.alexa.activity.json)
 
 	# try again in case CSRF timed out
 	if [ $RES -ne 200 ] ; then
