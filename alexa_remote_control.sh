@@ -1160,7 +1160,7 @@ get_history()
 last_alexa()
 {
 	get_history
-	${JQ} -r '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .recordKey' ${TMP}/.alexa.activity.json | cut -d'#' -f4 | xargs -i grep -m 1 {} ${DEVLIST}.txt
+	${JQ} -r '.alexaHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .activityKey' ${TMP}/.alexa.activity.json | cut -d'#' -f4 | xargs -i grep -m 1 {} ${DEVLIST}.txt
 }
 #
 # last command or last command of a specific device
@@ -1170,9 +1170,9 @@ last_command()
 	get_history
 
 	if [ -z "$DEVICE" ] ; then
-		${JQ} -r --arg device "$DEVICE" '.customerHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .voiceHistoryRecordItems | map({key: .recordItemType, value: .transcriptText})' ${TMP}/.alexa.activity.json
+		${JQ} -r '.alexaHistoryRecords | sort_by(.timestamp) | reverse | .[0] | .voiceHistoryRecordItems | map({key: .recordItemType, value: .transcriptText})' ${TMP}/.alexa.activity.json
 	else
-		${JQ} -r --arg device "$DEVICE" '[ .customerHistoryRecords | sort_by(.timestamp) | reverse | .[] | select( .device.deviceName == $device) ][0] | .voiceHistoryRecordItems | map({key: .recordItemType, value: .transcriptText})' ${TMP}/.alexa.activity.json
+		${JQ} -r --arg device "$DEVICE" '[ .alexaHistoryRecords | sort_by(.timestamp) | reverse | .[] | select(.recordType == "utterance" and .deviceInfo.deviceName == $device) ][0] | .voiceHistoryRecordItems | map({key: .recordItemType, value: .transcriptText})' ${TMP}/.alexa.activity.json
 	fi
 }
 
